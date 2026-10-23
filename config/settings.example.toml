@@ -1,0 +1,15 @@
+[llm]
+provider = "ollama"          # ollama или llamacpp
+model = "phi3:mini"
+base_url = "http://localhost:11434"
+max_steps = 10
+
+[paths]
+data_dir = "data"
+notes_dir = "data/notes"
+inbox_dir = "data/inbox"
+photos_dir = "data/photos"
+logs_dir = "logs"
+
+[safety]
+confirm_file_operations = true
