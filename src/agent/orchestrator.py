@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.agent.llm import LLMClient
 from src.agent.registry import ToolRegistry
@@ -19,6 +19,7 @@ class OrchestratorResult:
     final_answer: str | None
     steps_used: int
     error: str | None = None
+    tool_results: list[str] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -38,6 +39,7 @@ class Orchestrator:
 
     def run(self, goal: str) -> OrchestratorResult:
         messages: list[dict] = [{"role": "user", "content": goal}]
+        tool_results: list[str] = []
 
         for step in range(1, self.max_steps + 1):
             response = self.llm.chat(messages)
@@ -49,6 +51,7 @@ class Orchestrator:
                     success=True,
                     final_answer=response.content,
                     steps_used=step,
+                    tool_results=tool_results,
                 )
 
             if response.type == "tool_call":
@@ -67,6 +70,7 @@ class Orchestrator:
                         "tool %s failed", response.tool_name
                     )
                 else:
+                    tool_results.append(str(result))
                     self.logger.info(
                         "tool %s -> %s", response.tool_name, result
                     )
