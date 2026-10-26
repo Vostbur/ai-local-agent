@@ -123,6 +123,11 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     paths_raw = raw.get("paths", {})
     paths = PathsConfig(
+        data_dir=Path(paths_raw.get("data_dir", "data")),
+        notes_dir=Path(paths_raw.get("notes_dir", "data/notes")),
+        inbox_dir=Path(paths_raw.get("inbox_dir", "data/inbox")),
+        photos_dir=Path(paths_raw.get("photos_dir", "data/photos")),
+        logs_dir=Path(paths_raw.get("logs_dir", "logs")),
         memory=Path(paths_raw.get("memory", "memory")),
         tools=Path(paths_raw.get("tools", "tools")),
         logs=Path(paths_raw.get("logs", "logs")),

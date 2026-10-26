@@ -1,0 +1,50 @@
+title: Список покупок
+title len: 14
+title bytes: b'\xd0\xa1\xd0\xbf\xd0\xb8\xd1\x81\xd0\xbe\xd0\xba \xd0\xbf\xd0\xbe\xd0\xba\xd1\x83\xd0\xbf\xd0\xbe\xd0\xba'
+body: 
+Молоко, хлеб, яйца
+search_text_lower: список покупок список_покупок.md 
+молоко, хлеб, яйца
+search_text_lower bytes: b'\xd1\x81\xd0\xbf\xd0\xb8\xd1\x81\xd0\xbe\xd0\xba \xd0\xbf\xd0\xbe\xd0\xba\xd1\x83\xd0\xbf\xd0\xbe\xd0\xba \xd1\x81\xd0\xbf\xd0\xb8\xd1\x81\xd0\xbe\xd0\xba_\xd0\xbf\xd0\xbe\xd0\xba\xd1\x83\xd0\xbf\xd0\xbe\xd0\xba.md \n\xd0\xbc\xd0\xbe\xd0\xbb\xd0\xbe\xd0\xba\xd0\xbe, \xd1\x85\xd0\xbb\xd0\xb5\xd0\xb1, \xd1\x8f\xd0\xb9\xd1\x86\xd0\xb0'
+word: покупки
+word len: 7
+word bytes: b'\xd0\xbf\xd0\xbe\xd0\xba\xd1\x83\xd0\xbf\xd0\xba\xd0\xb8'
+sublen: 6
+word_sub: покупк
+word_sub bytes: b'\xd0\xbf\xd0\xbe\xd0\xba\xd1\x83\xd0\xbf\xd0\xba'
+word_sub in search: False
+
+Direct check:
+"покупк" in "список покупок": False
+
+Char codes in title:
+  [0] С = 1057 = 0x421
+  [1] п = 1087 = 0x43f
+  [2] и = 1080 = 0x438
+  [3] с = 1089 = 0x441
+  [4] о = 1086 = 0x43e
+  [5] к = 1082 = 0x43a
+  [6]   = 32 = 0x20
+  [7] п = 1087 = 0x43f
+  [8] о = 1086 = 0x43e
+  [9] к = 1082 = 0x43a
+  [10] у = 1091 = 0x443
+  [11] п = 1087 = 0x43f
+  [12] о = 1086 = 0x43e
+  [13] к = 1082 = 0x43a
+
+Char codes in word_sub:
+  [0] п = 1087 = 0x43f
+  [1] о = 1086 = 0x43e
+  [2] к = 1082 = 0x43a
+  [3] у = 1091 = 0x443
+  [4] п = 1087 = 0x43f
+  [5] к = 1082 = 0x43a
+
+Searching for "п" (U+043F) in search_text_lower:
+  Found at pos 1: 'список поку'
+  Found at pos 7: 'к покупок сп'
+  Found at pos 11: 'купок список'
+  Found at pos 16: ' список_поку'
+  Found at pos 22: 'к_покупок.md'
+  Found at pos 26: 'купок.md \nмо'

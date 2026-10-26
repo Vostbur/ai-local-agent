@@ -1,0 +1,3 @@
+result count: 2
+result: [{'path': 'data\\notes\\список_покупок.md', 'title': 'Список покупок', 'preview': 'Молоко, хлеб, яйца'}, {'path': 'data\\notes\\список_покупок_1.md', 'title': 'Список покупок', 'preview': 'Молоко, хлеб, яйца'}]
+title: Список покупок

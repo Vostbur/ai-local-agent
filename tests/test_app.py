@@ -61,3 +61,19 @@ def test_llm_model_matches_config():
     config = _make_config()
     orch = build_orchestrator(config, logging.getLogger("test"))
     assert orch.llm.model == config.llm.model
+
+
+def test_build_orchestrator_registers_all_tools():
+    config = _make_config()
+    orch = build_orchestrator(config, logging.getLogger("test"))
+    assert orch.registry.get("save_note") is not None
+    assert orch.registry.get("read_notes") is not None
+    assert orch.registry.get("search_notes") is not None
+
+
+def test_tool_context_has_notes_dir_for_all_tools():
+    config = _make_config()
+    orch = build_orchestrator(config, logging.getLogger("test"))
+    assert orch.tool_context["save_note"]["notes_dir"] == config.paths.notes_dir
+    assert orch.tool_context["read_notes"]["notes_dir"] == config.paths.notes_dir
+    assert orch.tool_context["search_notes"]["notes_dir"] == config.paths.notes_dir
