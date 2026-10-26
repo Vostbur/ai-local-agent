@@ -5,7 +5,7 @@ import pytest
 
 from src.agent.llm import FakeLLM, LLMResponse
 from src.agent.registry import ToolRegistry, ToolDefinition
-from src.agent.orchestrator import Orchestrator, MaxStepsExceeded
+from src.agent.orchestrator import Orchestrator, MaxStepsExceeded, SYSTEM_PROMPT
 from src.agent.tools.save_note import save_note, SAVE_NOTE_TOOL
 
 logger = logging.getLogger("test")
@@ -167,3 +167,8 @@ def test_repeated_identical_tool_call_is_skipped():
     assert any("ALREADY_EXECUTED" in m["content"] for m in tool_results)
     assert result.success is True
     assert result.final_answer == "done"
+
+
+def test_system_prompt_mentions_tool_routing():
+    assert "read_notes" in SYSTEM_PROMPT
+    assert "search_notes" in SYSTEM_PROMPT
