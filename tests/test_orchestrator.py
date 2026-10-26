@@ -89,7 +89,8 @@ def test_tool_raises_error_orchestrator_continues():
 
     assert result.success is True
     assert result.final_answer == "recovered"
-    assert "ERROR: boom" in llm.calls[1][2]["content"]
+    tool_results = [m for m in llm.calls[-1] if m["role"] == "user" and m["content"].startswith("tool_result")]
+    assert any("ERROR: boom" in m["content"] for m in tool_results)
 
 
 def test_save_note_via_tool_context(tmp_path: Path):
@@ -121,3 +122,48 @@ def test_save_note_via_tool_context(tmp_path: Path):
 
     tool_call_args = llm.calls[0][-1].get("content", "")
     assert "notes_dir" not in tool_call_args
+
+
+def test_system_prompt_is_added():
+    llm = FakeLLM([LLMResponse(type="final", content="ok")])
+    registry = ToolRegistry()
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    orchestrator.run("goal")
+
+    assert llm.calls[0][0]["role"] == "system"
+    assert llm.calls[0][1]["role"] == "user"
+
+
+def test_repeated_identical_tool_call_is_skipped():
+    call_count = 0
+
+    def echo_tool(text: str) -> str:
+        nonlocal call_count
+        call_count += 1
+        return text
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Echo the text",
+            parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+            func=echo_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="echo", tool_arguments={"text": "hi"}),
+        LLMResponse(type="tool_call", tool_name="echo", tool_arguments={"text": "hi"}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("echo hi")
+
+    assert call_count == 1
+    tool_results = [m for m in llm.calls[-1] if m["role"] == "user" and m["content"].startswith("tool_result")]
+    assert any("ALREADY_EXECUTED" in m["content"] for m in tool_results)
+    assert result.success is True
+    assert result.final_answer == "done"

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from src.agent.llm import LLMClient
 from src.agent.registry import ToolRegistry
 
+SYSTEM_PROMPT = "Ты — локальный ассистент с инструментами. "
+
 
 class MaxStepsExceeded(Exception):
     pass
@@ -38,8 +40,12 @@ class Orchestrator:
         self.tool_context = tool_context or {}
 
     def run(self, goal: str) -> OrchestratorResult:
-        messages: list[dict] = [{"role": "user", "content": goal}]
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": goal},
+        ]
         tool_results: list[str] = []
+        executed_calls: set[str] = set()
 
         for step in range(1, self.max_steps + 1):
             response = self.llm.chat(messages)
@@ -60,20 +66,35 @@ class Orchestrator:
                     **(response.tool_arguments or {}),
                     **extra,
                 }
-                try:
-                    result = self.registry.call(
-                        response.tool_name, **arguments
+                call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
+
+                tool_succeeded = True
+
+                if call_key in executed_calls:
+                    result = (
+                        f"ALREADY_EXECUTED: инструмент '{response.tool_name}' "
+                        f"уже был вызван с этими аргументами. Не вызывай его снова — "
+                        f"дай финальный ответ."
                     )
-                except Exception as exc:
-                    result = f"ERROR: {exc}"
-                    self.logger.exception(
-                        "tool %s failed", response.tool_name
-                    )
+                    self.logger.info("repeated tool call skipped: %s", call_key)
                 else:
-                    tool_results.append(str(result))
-                    self.logger.info(
-                        "tool %s -> %s", response.tool_name, result
-                    )
+                    try:
+                        result = self.registry.call(
+                            response.tool_name, **arguments
+                        )
+                        tool_succeeded = True
+                        executed_calls.add(call_key)
+                    except Exception as exc:
+                        tool_succeeded = False
+                        result = f"ERROR: {exc}"
+                        self.logger.exception(
+                            "tool %s failed", response.tool_name
+                        )
+                    else:
+                        tool_results.append(str(result))
+                        self.logger.info(
+                            "tool %s -> %s", response.tool_name, result
+                        )
 
                 messages.append(
                     {
@@ -83,10 +104,15 @@ class Orchestrator:
                         ),
                     }
                 )
+                status = "SUCCESS" if tool_succeeded else "ERROR"
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"tool_result: {result}",
+                        "content": (
+                            f"tool_result: {status}. {response.tool_name} returned: "
+                            f"{result}. If this satisfies the user's goal, "
+                            f"respond with a final answer now."
+                        ),
                     }
                 )
 
