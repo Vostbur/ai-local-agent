@@ -56,17 +56,17 @@ def save_note(title: str, content: str, notes_dir: Path) -> Path:
 
 SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
     name="save_note",
-    description="Save a note to a Markdown file. Creates a new file; never overwrites existing notes.",
+    description='Save a note to a Markdown file. Use when the user asks to: сохранить заметку, записать заметку, создать заметку, занести в заметки, save a note, write a note, create a note. Creates a new file; never overwrites.',
     parameters={
         "type": "object",
         "properties": {
             "title": {
                 "type": "string",
-                "description": "The title of the note.",
+                "description": "Note title, used as filename. Example: 'Список покупок'. If the user did not give an explicit title, extract a short descriptive phrase (3-7 words) from their request.",
             },
             "content": {
                 "type": "string",
-                "description": "The content of the note.",
+                "description": "Note body in Markdown. If the user did not provide content, use an empty string.",
             },
         },
         "required": ["title", "content"],

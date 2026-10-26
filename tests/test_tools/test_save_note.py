@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.tools.save_note import save_note
+from src.agent.tools.save_note import SAVE_NOTE_TOOL, save_note
 
 
 def test_saves_note_and_returns_path(tmp_path: Path) -> None:
@@ -62,3 +62,23 @@ def test_special_chars_removed_from_filename(tmp_path: Path) -> None:
     assert "?" not in result.name
     assert "*" not in result.name
     assert result.name == "filename.md"
+
+
+def test_save_note_tool_description_has_russian_triggers() -> None:
+    description = SAVE_NOTE_TOOL.description
+
+    assert any(
+        word in description
+        for word in ["заметку", "записать", "сохранить"]
+    )
+
+    assert "save" in description
+
+    assert len(description) <= 300
+
+    title_desc = SAVE_NOTE_TOOL.parameters["properties"]["title"]["description"]
+    assert title_desc
+    assert "Example" in title_desc
+
+    content_desc = SAVE_NOTE_TOOL.parameters["properties"]["content"]["description"]
+    assert "empty string" in content_desc
