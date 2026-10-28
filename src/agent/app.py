@@ -27,6 +27,8 @@ def build_orchestrator(
         model=config.llm.model,
         base_url=config.llm.base_url,
         tools=tools,
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
     )
 
     tool_context = {

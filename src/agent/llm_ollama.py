@@ -18,11 +18,15 @@ class OllamaLLM:
         base_url: str = "http://localhost:11434",
         timeout: int = 300,
         tools: list[ToolDefinition] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         self.model = model
         self.base_url = base_url
         self.timeout = timeout
         self.tools = tools or []
+        self.temperature = temperature
+        self.max_tokens = max_tokens
 
     def chat(self, messages: list[dict]) -> LLMResponse:
         last = messages[-1] if messages else {}
@@ -56,6 +60,10 @@ class OllamaLLM:
         }
         if tools_payload is not None:
             payload["tools"] = tools_payload
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
 
         try:
             resp = requests.post(

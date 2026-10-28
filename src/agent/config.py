@@ -23,8 +23,8 @@ class LLMConfig:
     provider: str = "ollama"
     model: str = "qwen2.5-3b-agent"
     base_url: str = "http://localhost:11434"
-    temperature: float = 0.7
-    max_tokens: int = 4096
+    temperature: float | None = None
+    max_tokens: int | None = None
     max_steps: int = 10
 
 
@@ -115,8 +115,8 @@ def load_config(path: Path | None = None) -> AppConfig:
         provider=llm_raw.get("provider", "ollama"),
         model=llm_raw["model"],
         base_url=llm_raw.get("base_url", "http://localhost:11434"),
-        temperature=llm_raw.get("temperature", 0.7),
-        max_tokens=llm_raw.get("max_tokens", 4096),
+        temperature=llm_raw.get("temperature"),
+        max_tokens=llm_raw.get("max_tokens"),
         max_steps=llm_raw.get("max_steps", 10),
     )
 

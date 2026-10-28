@@ -256,3 +256,28 @@ class TestOllamaLLMLogging:
                 )
 
         assert "SECRET_NOTE_TEXT" not in caplog.text
+
+
+class TestOllamaLLMTemperatureMaxTokens:
+    def _sent_payload(self, **llm_kwargs) -> dict:
+        payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+        with unittest.mock.patch("src.agent.llm_ollama.requests.post") as mock_post:
+            mock_post.return_value = _make_mock_response(payload)
+            OllamaLLM(**llm_kwargs).chat([{"role": "user", "content": "x"}])
+            return mock_post.call_args.kwargs["json"]
+
+    def test_temperature_in_payload(self):
+        sent = self._sent_payload(temperature=0.3)
+        assert sent["temperature"] == 0.3
+
+    def test_max_tokens_in_payload(self):
+        sent = self._sent_payload(max_tokens=1024)
+        assert sent["max_tokens"] == 1024
+
+    def test_no_temperature_when_none(self):
+        sent = self._sent_payload()
+        assert "temperature" not in sent
+
+    def test_no_max_tokens_when_none(self):
+        sent = self._sent_payload()
+        assert "max_tokens" not in sent

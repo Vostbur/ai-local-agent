@@ -3,6 +3,10 @@ provider = "ollama"          # ollama или llamacpp
 model = "qwen2.5-3b-agent:latest"
 base_url = "http://localhost:11434"
 max_steps = 10
+# Опционально: если не указать — Ollama применит свои дефолты.
+# Для tool calling на 3B-модели обычно лучше низкая температура.
+# temperature = 0.3
+# max_tokens = 1024
 
 [paths]
 data_dir = "data"
