@@ -37,10 +37,9 @@ class PathsConfig:
         notes_dir: Путь к директории заметок.
         inbox_dir: Путь к входящим.
         photos_dir: Путь к фотографиям.
-        logs_dir: Путь к логам.
+        logs_dir: Путь к директории логов.
         memory: Путь к директории памяти.
         tools: Путь к директории инструментов.
-        logs: Путь к файлу или директории логов.
     """
 
     data_dir: Path = Path("data")
@@ -50,7 +49,6 @@ class PathsConfig:
     logs_dir: Path = Path("logs")
     memory: Path = Path("memory")
     tools: Path = Path("tools")
-    logs: Path = Path("logs")
 
 
 @dataclass
@@ -131,7 +129,6 @@ def load_config(path: Path | None = None) -> AppConfig:
         logs_dir=Path(paths_raw.get("logs_dir", "logs")),
         memory=Path(paths_raw.get("memory", "memory")),
         tools=Path(paths_raw.get("tools", "tools")),
-        logs=Path(paths_raw.get("logs", "logs")),
     )
 
     safety_raw = raw.get("safety", {})

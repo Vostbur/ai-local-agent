@@ -24,7 +24,7 @@ max_tokens = 2048
 [paths]
 memory = "my_memory"
 tools = "my_tools"
-logs = "my_logs"
+logs_dir = "my_logs"
 
 [safety]
 max_tool_retries = 5
@@ -41,7 +41,7 @@ allow_network = true
         assert result.paths == PathsConfig(
             memory=Path("my_memory"),
             tools=Path("my_tools"),
-            logs=Path("my_logs"),
+            logs_dir=Path("my_logs"),
         )
         assert result.safety == SafetyConfig(
             max_tool_retries=5,

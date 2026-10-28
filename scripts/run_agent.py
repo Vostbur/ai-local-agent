@@ -54,7 +54,7 @@ def main() -> None:
         print("Не найден config/settings.toml. Скопируйте config/settings.example.toml в config/settings.toml.")
         sys.exit(1)
 
-    logger = setup_logging(config.paths.logs)
+    logger = setup_logging(config.paths.logs_dir)
 
     orchestrator = build_orchestrator(config, logger)
 
