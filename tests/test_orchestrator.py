@@ -234,7 +234,6 @@ def test_failed_call_yields_error_status():
     ]
     assert any("tool_result: ERROR." in m["content"] for m in tool_results)
 
-
 def test_system_prompt_mentions_tool_routing():
     assert "read_notes" in SYSTEM_PROMPT
     assert "search_notes" in SYSTEM_PROMPT
@@ -277,7 +276,6 @@ def test_failing_tool_gives_up_after_max_failures():
     assert any("giving up" in m["content"] for m in tool_results)
     assert any("Do NOT call it again" in m["content"] for m in tool_results)
 
-
 def test_failed_call_does_not_block_success_after_retry():
     call_count = 0
 
@@ -311,3 +309,18 @@ def test_failed_call_does_not_block_success_after_retry():
     assert result.success is True
     assert result.final_answer == "recovered"
     assert result.tool_results == ["ok"]
+
+def test_unknown_response_type_returns_error():
+    """Неизвестный response.type → OrchestratorResult с ошибкой, не зацикливание."""
+    llm = FakeLLM([LLMResponse(type="unknown")])  # type: ignore[arg-type]
+    registry = ToolRegistry()
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("goal")
+
+    assert result.success is False
+    assert result.error is not None
+    assert "unknown" in result.error
+    assert result.steps_used == 1
+    # цикл не дошёл до max_steps, значит второго вызова llm не было
+    assert len(llm.calls) == 1

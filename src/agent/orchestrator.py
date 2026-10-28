@@ -73,7 +73,7 @@ class Orchestrator:
                     tool_results=tool_results,
                 )
 
-            if response.type == "tool_call":
+            elif response.type == "tool_call":
                 extra = self.tool_context.get(response.tool_name, {})
                 arguments = {
                     **(response.tool_arguments or {}),
@@ -142,6 +142,20 @@ class Orchestrator:
                     )
 
                 messages.append({"role": "user", "content": content})
+
+            else:
+                self.logger.warning(
+                    "unknown response type: %r at step %d",
+                    response.type,
+                    step,
+                )
+                return OrchestratorResult(
+                    success=False,
+                    final_answer=None,
+                    steps_used=step,
+                    error=f"unknown response type: {response.type!r}",
+                    tool_results=tool_results,
+                )
 
         raise MaxStepsExceeded(
             f"Достигнут лимит шагов: {self.max_steps}"
