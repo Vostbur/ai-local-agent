@@ -72,3 +72,65 @@ allow_shell = false
 
         with pytest.raises(ValueError, match="не содержит обязательную секцию \\[llm\\]"):
             load_config(toml_file)
+
+    def test_reads_all_llm_fields_from_toml(self, tmp_path: Path) -> None:
+        """Все поля [llm] из TOML попадают в LLMConfig."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+provider = "llamacpp"
+model = "custom-model"
+base_url = "http://custom:8080"
+max_steps = 5
+temperature = 0.3
+max_tokens = 1024
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.llm.provider == "llamacpp"
+        assert result.llm.model == "custom-model"
+        assert result.llm.base_url == "http://custom:8080"
+        assert result.llm.max_steps == 5
+        assert result.llm.temperature == 0.3
+        assert result.llm.max_tokens == 1024
+
+    def test_reads_confirm_file_operations_from_toml(
+        self, tmp_path: Path
+    ) -> None:
+        """Поле confirm_file_operations читается из [safety]."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+
+[safety]
+confirm_file_operations = true
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.safety.confirm_file_operations is True
+
+    def test_confirm_file_operations_default_false(
+        self, tmp_path: Path
+    ) -> None:
+        """Если в TOML нет поля — confirm_file_operations = False."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.safety.confirm_file_operations is False

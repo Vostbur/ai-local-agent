@@ -104,9 +104,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     if path is None:
         path = Path("config", "settings.toml")
 
-    data = path.read_bytes()
-
-    with Path.open(path, "rb") as fh:
+    with path.open("rb") as fh:
         raw = tomllib.load(fh)
 
     if "llm" not in raw:
@@ -116,9 +114,12 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     llm_raw = raw["llm"]
     llm = LLMConfig(
+        provider=llm_raw.get("provider", "ollama"),
         model=llm_raw["model"],
+        base_url=llm_raw.get("base_url", "http://localhost:11434"),
         temperature=llm_raw.get("temperature", 0.7),
         max_tokens=llm_raw.get("max_tokens", 4096),
+        max_steps=llm_raw.get("max_steps", 10),
     )
 
     paths_raw = raw.get("paths", {})
@@ -135,6 +136,9 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     safety_raw = raw.get("safety", {})
     safety = SafetyConfig(
+        confirm_file_operations=safety_raw.get(
+            "confirm_file_operations", False
+        ),
         max_tool_retries=safety_raw.get("max_tool_retries", 3),
         allow_shell=safety_raw.get("allow_shell", False),
         allow_network=safety_raw.get("allow_network", False),

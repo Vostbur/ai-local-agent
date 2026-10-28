@@ -4,7 +4,13 @@ import logging
 from pathlib import Path
 
 from src.agent.app import build_orchestrator
-from src.agent.config import AppConfig, LLMConfig, PathsConfig, SafetyConfig
+from src.agent.config import (
+    AppConfig,
+    LLMConfig,
+    PathsConfig,
+    SafetyConfig,
+    load_config,
+)
 from src.agent.orchestrator import Orchestrator
 from src.agent.registry import ToolRegistry
 
@@ -77,3 +83,25 @@ def test_tool_context_has_notes_dir_for_all_tools():
     assert orch.tool_context["save_note"]["notes_dir"] == config.paths.notes_dir
     assert orch.tool_context["read_notes"]["notes_dir"] == config.paths.notes_dir
     assert orch.tool_context["search_notes"]["notes_dir"] == config.paths.notes_dir
+
+
+def test_toml_reaches_orchestrator_and_llm(tmp_path: Path):
+    """TOML → AppConfig → Orchestrator.max_steps и OllamaLLM.model/base_url."""
+    toml_file = tmp_path / "settings.toml"
+    toml_file.write_text(
+        """\
+[llm]
+provider = "ollama"
+model = "test-model-from-toml"
+base_url = "http://test-host:11434"
+max_steps = 7
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(toml_file)
+    orch = build_orchestrator(config, logging.getLogger("test"))
+
+    assert orch.max_steps == 7
+    assert orch.llm.model == "test-model-from-toml"
+    assert orch.llm.base_url == "http://test-host:11434"
