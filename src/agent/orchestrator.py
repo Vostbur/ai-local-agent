@@ -78,24 +78,19 @@ class Orchestrator:
                 }
                 call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
 
-                tool_succeeded = True
-
                 if call_key in executed_calls:
-                    result = (
-                        f"ALREADY_EXECUTED: инструмент '{response.tool_name}' "
-                        f"уже был вызван с этими аргументами. Не вызывай его снова — "
-                        f"дай финальный ответ."
-                    )
+                    tool_status = "SKIPPED"
+                    result = "was not executed again because the same call already succeeded"
                     self.logger.info("repeated tool call skipped: %s", call_key)
                 else:
                     try:
                         result = self.registry.call(
                             response.tool_name, **arguments
                         )
-                        tool_succeeded = True
+                        tool_status = "SUCCESS"
                         executed_calls.add(call_key)
                     except Exception as exc:
-                        tool_succeeded = False
+                        tool_status = "ERROR"
                         result = f"ERROR: {exc}"
                         self.logger.exception(
                             "tool %s failed", response.tool_name
@@ -114,17 +109,20 @@ class Orchestrator:
                         ),
                     }
                 )
-                status = "SUCCESS" if tool_succeeded else "ERROR"
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            f"tool_result: {status}. {response.tool_name} returned: "
-                            f"{result}. If this satisfies the user's goal, "
-                            f"respond with a final answer now."
-                        ),
-                    }
-                )
+
+                if tool_status == "SKIPPED":
+                    content = (
+                        f"tool_result: SKIPPED. {response.tool_name} {result}. "
+                        f"Respond with a final answer now."
+                    )
+                else:
+                    content = (
+                        f"tool_result: {tool_status}. {response.tool_name} returned: "
+                        f"{result}. If this satisfies the user's goal, "
+                        f"respond with a final answer now."
+                    )
+
+                messages.append({"role": "user", "content": content})
 
         raise MaxStepsExceeded(
             f"Достигнут лимит шагов: {self.max_steps}"

@@ -164,9 +164,70 @@ def test_repeated_identical_tool_call_is_skipped():
 
     assert call_count == 1
     tool_results = [m for m in llm.calls[-1] if m["role"] == "user" and m["content"].startswith("tool_result")]
-    assert any("ALREADY_EXECUTED" in m["content"] for m in tool_results)
+    assert any("tool_result: SKIPPED." in m["content"] for m in tool_results)
+    assert len(result.tool_results) == 1
     assert result.success is True
     assert result.final_answer == "done"
+
+
+def test_successful_call_yields_success_status():
+    def echo_tool(text: str) -> str:
+        return text
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Echo the text",
+            parameters={"type": "object", "properties": {"text": {"type": "string"}}},
+            func=echo_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="echo", tool_arguments={"text": "hi"}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    orchestrator.run("echo hi")
+
+    tool_results = [
+        m for m in llm.calls[-1]
+        if m["role"] == "user" and m["content"].startswith("tool_result")
+    ]
+    assert any("tool_result: SUCCESS." in m["content"] for m in tool_results)
+    assert not any("SKIPPED" in m["content"] for m in tool_results)
+    assert not any("tool_result: ERROR." in m["content"] for m in tool_results)
+
+
+def test_failed_call_yields_error_status():
+    def boom_tool(**kwargs) -> str:
+        raise RuntimeError("boom")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="boom",
+            description="always fails",
+            parameters={"type": "object", "properties": {}},
+            func=boom_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    orchestrator.run("try boom")
+
+    tool_results = [
+        m for m in llm.calls[-1]
+        if m["role"] == "user" and m["content"].startswith("tool_result")
+    ]
+    assert any("tool_result: ERROR." in m["content"] for m in tool_results)
 
 
 def test_system_prompt_mentions_tool_routing():
