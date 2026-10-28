@@ -41,6 +41,8 @@ def _run_one(orchestrator, goal: str, logger: logging.Logger) -> None:
             print(f"Результаты инструментов: {tool_results}")
     else:
         print(f"Не удалось выполнить задачу. Шагов: {result.steps_used}")
+        if result.error:
+            print(f"Причина: {result.error}")
 
 
 def main() -> None:

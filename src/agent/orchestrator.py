@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.agent.llm import LLMClient
 from src.agent.registry import ToolRegistry
@@ -21,6 +22,22 @@ SYSTEM_PROMPT = (
 )
 
 MAX_TOOL_FAILURES = 2
+
+
+def _summarize_for_log(result: object) -> str:
+    """Краткое описание результата инструмента для лога.
+
+    Не логирует содержимое списков (preview/snippet), чтобы в лог
+    не попадали тексты заметок. Для ``Path`` оставляет путь —
+    это не текст заметки, а адрес файла, полезен для отладки.
+    """
+    if isinstance(result, Path):
+        return str(result)
+    if isinstance(result, str) and len(result) <= 200:
+        return result
+    if isinstance(result, list):
+        return f"list[{len(result)}]"
+    return f"{type(result).__name__}, len={len(str(result))}"
 
 
 class MaxStepsExceeded(Exception):
@@ -117,7 +134,11 @@ class Orchestrator:
                         )
                     else:
                         tool_results.append(str(result))
-                        self.logger.info("tool %s -> %s", response.tool_name, result)
+                        self.logger.info(
+                            "tool %s -> %s",
+                            response.tool_name,
+                            _summarize_for_log(result),
+                        )
 
                 display_args = response.tool_arguments or {}
                 messages.append(

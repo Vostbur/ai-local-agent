@@ -362,3 +362,31 @@ def test_max_tool_failures_from_constructor():
         if m["role"] == "user" and m["content"].startswith("tool_result")
     ]
     assert any("failed 3 times" in m["content"] for m in tool_results)
+
+def test_tool_result_not_logged_in_full(caplog):
+    """Содержимое списка (preview/snippet) не попадает в INFO-лог."""
+    def secret_tool(**kwargs):
+        return [{"title": "t", "preview": "SECRET_NOTE_TEXT"}]
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="secret",
+            description="returns sensitive data",
+            parameters={"type": "object", "properties": {}},
+            func=secret_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="secret", tool_arguments={}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        result = orchestrator.run("x")
+
+    assert result.success is True
+    assert "SECRET_NOTE_TEXT" not in caplog.text
+    assert "list[1]" in caplog.text
