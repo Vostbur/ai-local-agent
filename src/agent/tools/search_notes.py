@@ -17,7 +17,8 @@ def search_notes(
     Args:
         query: Строка поиска (ищется в body).
         notes_dir: Директория с Markdown-заметками.
-        max_results: Максимальное число результатов.
+        max_results: Максимальное число результатов. Чтение прекращается,
+            как только найдено нужное число совпадений.
 
     Returns:
         Список словарей с полями path, title, snippet, matches.
@@ -47,7 +48,6 @@ def search_notes(
             stem = query[:-2].lower()
             matches = len(re.findall(rf"\b{re.escape(stem)}", body.lower()))
 
-        # snippet: строка с совпадением + одна до и одна после
         line_start = body.rfind("\n", 0, start) + 1
         line_end = body.find("\n", start)
         if line_end == -1:
@@ -87,8 +87,10 @@ def search_notes(
             }
         )
 
-    results.sort(key=lambda r: r["path"])
-    return results[:max_results]
+        if len(results) >= max_results:
+            break
+
+    return results
 
 
 SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
