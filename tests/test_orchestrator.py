@@ -120,8 +120,13 @@ def test_save_note_via_tool_context(tmp_path: Path):
     assert len(files) == 1
     assert files[0].read_text(encoding="utf-8").startswith("# My Note")
 
-    tool_call_args = llm.calls[0][-1].get("content", "")
-    assert "notes_dir" not in tool_call_args
+    # История во втором запросе: assistant-сообщение не должно содержать notes_dir,
+    # потому что модель его не передавала — путь пришёл из tool_context.
+    second_call = llm.calls[1]
+    assistant_messages = [m for m in second_call if m["role"] == "assistant"]
+    assert len(assistant_messages) == 1
+    assert "tool_call: save_note" in assistant_messages[0]["content"]
+    assert "notes_dir" not in assistant_messages[0]["content"]
 
 
 def test_system_prompt_is_added():

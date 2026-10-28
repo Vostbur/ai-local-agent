@@ -101,11 +101,12 @@ class Orchestrator:
                             "tool %s -> %s", response.tool_name, result
                         )
 
+                display_args = response.tool_arguments or {}
                 messages.append(
                     {
                         "role": "assistant",
                         "content": (
-                            f"tool_call: {response.tool_name}({arguments})"
+                            f"tool_call: {response.tool_name}({display_args})"
                         ),
                     }
                 )
