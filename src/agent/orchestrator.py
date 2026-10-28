@@ -20,6 +20,8 @@ SYSTEM_PROMPT = (
     "Если про СОДЕРЖИМОЕ или текст внутри заметок — используй search_notes."
 )
 
+MAX_TOOL_FAILURES = 2
+
 
 class MaxStepsExceeded(Exception):
     pass
@@ -56,6 +58,7 @@ class Orchestrator:
         ]
         tool_results: list[str] = []
         executed_calls: set[str] = set()
+        failed_calls: dict[str, int] = {}
 
         for step in range(1, self.max_steps + 1):
             response = self.llm.chat(messages)
@@ -82,6 +85,18 @@ class Orchestrator:
                     tool_status = "SKIPPED"
                     result = "was not executed again because the same call already succeeded"
                     self.logger.info("repeated tool call skipped: %s", call_key)
+                elif failed_calls.get(call_key, 0) >= MAX_TOOL_FAILURES:
+                    tool_status = "ERROR"
+                    result = (
+                        f"failed {MAX_TOOL_FAILURES} times in a row, giving up. "
+                        f"Do NOT call it again."
+                    )
+                    self.logger.info(
+                        "tool %s giving up after %d failures: %s",
+                        response.tool_name,
+                        MAX_TOOL_FAILURES,
+                        call_key,
+                    )
                 else:
                     try:
                         result = self.registry.call(
@@ -91,9 +106,12 @@ class Orchestrator:
                         executed_calls.add(call_key)
                     except Exception as exc:
                         tool_status = "ERROR"
+                        failed_calls[call_key] = failed_calls.get(call_key, 0) + 1
                         result = f"ERROR: {exc}"
                         self.logger.exception(
-                            "tool %s failed", response.tool_name
+                            "tool %s failed (attempt %d)",
+                            response.tool_name,
+                            failed_calls[call_key],
                         )
                     else:
                         tool_results.append(str(result))

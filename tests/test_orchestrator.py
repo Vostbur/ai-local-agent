@@ -238,3 +238,76 @@ def test_failed_call_yields_error_status():
 def test_system_prompt_mentions_tool_routing():
     assert "read_notes" in SYSTEM_PROMPT
     assert "search_notes" in SYSTEM_PROMPT
+
+def test_failing_tool_gives_up_after_max_failures():
+    call_count = 0
+
+    def boom_tool(**kwargs) -> str:
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("boom")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="boom",
+            description="always fails",
+            parameters={"type": "object", "properties": {}},
+            func=boom_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("try boom")
+
+    assert call_count == 2
+    assert result.success is True
+    assert result.final_answer == "done"
+    tool_results = [
+        m for m in llm.calls[-1]
+        if m["role"] == "user" and m["content"].startswith("tool_result")
+    ]
+    assert any("giving up" in m["content"] for m in tool_results)
+    assert any("Do NOT call it again" in m["content"] for m in tool_results)
+
+
+def test_failed_call_does_not_block_success_after_retry():
+    call_count = 0
+
+    def flaky_tool(**kwargs) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("first attempt fails")
+        return "ok"
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="flaky",
+            description="fails once, then works",
+            parameters={"type": "object", "properties": {}},
+            func=flaky_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="flaky", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="flaky", tool_arguments={}),
+        LLMResponse(type="final", content="recovered"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("try flaky")
+
+    assert call_count == 2
+    assert result.success is True
+    assert result.final_answer == "recovered"
+    assert result.tool_results == ["ok"]
