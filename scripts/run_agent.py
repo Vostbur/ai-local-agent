@@ -51,7 +51,12 @@ def main() -> None:
     try:
         config = load_config()
     except FileNotFoundError:
-        print("Не найден config/settings.toml. Скопируйте config/settings.example.toml в config/settings.toml.")
+        from src.agent.config import _PROJECT_ROOT
+        expected = _PROJECT_ROOT / "config" / "settings.toml"
+        print(
+            f"Не найден файл настроек: {expected}\n"
+            f"Скопируйте config/settings.example.toml в config/settings.toml."
+        )
         sys.exit(1)
 
     logger = setup_logging(config.paths.logs_dir)

@@ -6,13 +6,20 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_path(value: str | Path) -> Path:
+    """Абсолютный путь или путь относительно корня проекта."""
+    path = Path(value)
+    return path if path.is_absolute() else _PROJECT_ROOT / path
+
 
 @dataclass
 class LLMConfig:
     """Настройки LLM-модели.
 
     Атрибуты:
-        provider: Провайдер LLM (например, "ollama").
         model: Имя модели.
         base_url: URL LLM-сервера.
         temperature: Температура генерации (0.0 – 2.0).
@@ -20,7 +27,6 @@ class LLMConfig:
         max_steps: Максимальное число шагов оркестратора.
     """
 
-    provider: str = "ollama"
     model: str = "qwen2.5-3b-agent"
     base_url: str = "http://localhost:11434"
     temperature: float | None = None
@@ -86,8 +92,9 @@ class AppConfig:
 def load_config(path: Path | None = None) -> AppConfig:
     """Загружает конфигурацию из TOML-файла.
 
-    Если *path* не указан, ищет ``config/settings.toml``
-    относительно текущего рабочего каталога.
+    Если *path* не указан, ищет ``config/settings.toml`` в корне проекта
+    (независимо от текущего рабочего каталога). Относительные пути в
+    секции ``[paths]`` резолвятся от корня проекта, а не от CWD.
 
     Args:
         path: Путь к TOML-файлу конфигурации.
@@ -100,7 +107,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         ValueError: Если в файле отсутствует обязательная секция ``[llm]``.
     """
     if path is None:
-        path = Path("config", "settings.toml")
+        path = _PROJECT_ROOT / "config" / "settings.toml"
 
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
@@ -112,7 +119,6 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     llm_raw = raw["llm"]
     llm = LLMConfig(
-        provider=llm_raw.get("provider", "ollama"),
         model=llm_raw["model"],
         base_url=llm_raw.get("base_url", "http://localhost:11434"),
         temperature=llm_raw.get("temperature"),
@@ -122,13 +128,13 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     paths_raw = raw.get("paths", {})
     paths = PathsConfig(
-        data_dir=Path(paths_raw.get("data_dir", "data")),
-        notes_dir=Path(paths_raw.get("notes_dir", "data/notes")),
-        inbox_dir=Path(paths_raw.get("inbox_dir", "data/inbox")),
-        photos_dir=Path(paths_raw.get("photos_dir", "data/photos")),
-        logs_dir=Path(paths_raw.get("logs_dir", "logs")),
-        memory=Path(paths_raw.get("memory", "memory")),
-        tools=Path(paths_raw.get("tools", "tools")),
+        data_dir=_resolve_path(paths_raw.get("data_dir", "data")),
+        notes_dir=_resolve_path(paths_raw.get("notes_dir", "data/notes")),
+        inbox_dir=_resolve_path(paths_raw.get("inbox_dir", "data/inbox")),
+        photos_dir=_resolve_path(paths_raw.get("photos_dir", "data/photos")),
+        logs_dir=_resolve_path(paths_raw.get("logs_dir", "logs")),
+        memory=_resolve_path(paths_raw.get("memory", "memory")),
+        tools=_resolve_path(paths_raw.get("tools", "tools")),
     )
 
     safety_raw = raw.get("safety", {})
