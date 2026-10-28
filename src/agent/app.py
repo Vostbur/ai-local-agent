@@ -43,4 +43,5 @@ def build_orchestrator(
         logger=logger,
         max_steps=config.llm.max_steps,
         tool_context=tool_context,
+        max_tool_failures=config.safety.max_tool_retries,
     )

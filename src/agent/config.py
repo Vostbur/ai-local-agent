@@ -63,15 +63,13 @@ class SafetyConfig:
 
     Атрибуты:
         confirm_file_operations: Требовать подтверждение операций с файлами.
-        max_tool_retries: Максимальное число повторов выполнения инструмента.
-        allow_shell: Разрешить выполнение shell-команд.
-        allow_network: Разрешить сетевые запросы.
+            Читается из TOML; логика подтверждения появится в шаге 8 (`move_file`).
+        max_tool_retries: Максимальное число повторов падающего вызова
+            инструмента перед тем, как оркестратор сдастся.
     """
 
     confirm_file_operations: bool = False
-    max_tool_retries: int = 3
-    allow_shell: bool = False
-    allow_network: bool = False
+    max_tool_retries: int = 2
 
 
 @dataclass
@@ -113,9 +111,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         raw = tomllib.load(fh)
 
     if "llm" not in raw:
-        raise ValueError(
-            f"Файл {path} не содержит обязательную секцию [llm]"
-        )
+        raise ValueError(f"Файл {path} не содержит обязательную секцию [llm]")
 
     llm_raw = raw["llm"]
     llm = LLMConfig(
@@ -139,12 +135,8 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     safety_raw = raw.get("safety", {})
     safety = SafetyConfig(
-        confirm_file_operations=safety_raw.get(
-            "confirm_file_operations", False
-        ),
-        max_tool_retries=safety_raw.get("max_tool_retries", 3),
-        allow_shell=safety_raw.get("allow_shell", False),
-        allow_network=safety_raw.get("allow_network", False),
+        confirm_file_operations=safety_raw.get("confirm_file_operations", False),
+        max_tool_retries=safety_raw.get("max_tool_retries", 2),
     )
 
     return AppConfig(llm=llm, paths=paths, safety=safety)

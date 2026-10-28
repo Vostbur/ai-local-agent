@@ -35,8 +35,6 @@ logs_dir = "my_logs"
 
 [safety]
 max_tool_retries = 5
-allow_shell = true
-allow_network = true
 """,
             encoding="utf-8",
         )
@@ -45,16 +43,10 @@ allow_network = true
 
         assert isinstance(result, AppConfig)
         assert result.llm == LLMConfig(model="gpt-4", temperature=0.5, max_tokens=2048)
-
         assert result.paths.memory == _PROJECT_ROOT / "my_memory"
         assert result.paths.tools == _PROJECT_ROOT / "my_tools"
         assert result.paths.logs_dir == _PROJECT_ROOT / "my_logs"
-        assert result.paths.notes_dir == _PROJECT_ROOT / "data" / "notes"
-        assert result.safety == SafetyConfig(
-            max_tool_retries=5,
-            allow_shell=True,
-            allow_network=True,
-        )
+        assert result.safety == SafetyConfig(max_tool_retries=5)
 
     def test_file_not_found(self, tmp_path: Path) -> None:
         """FileNotFoundError при отсутствии файла."""
@@ -72,12 +64,14 @@ allow_network = true
 memory = "mem"
 
 [safety]
-allow_shell = false
+confirm_file_operations = false
 """,
             encoding="utf-8",
         )
 
-        with pytest.raises(ValueError, match="не содержит обязательную секцию \\[llm\\]"):
+        with pytest.raises(
+            ValueError, match="не содержит обязательную секцию \\[llm\\]"
+        ):
             load_config(toml_file)
 
     def test_reads_all_llm_fields_from_toml(self, tmp_path: Path) -> None:
@@ -86,7 +80,6 @@ allow_shell = false
         toml_file.write_text(
             """\
 [llm]
-provider = "llamacpp"
 model = "custom-model"
 base_url = "http://custom:8080"
 max_steps = 5
@@ -104,9 +97,7 @@ max_tokens = 1024
         assert result.llm.temperature == 0.3
         assert result.llm.max_tokens == 1024
 
-    def test_reads_confirm_file_operations_from_toml(
-        self, tmp_path: Path
-    ) -> None:
+    def test_reads_confirm_file_operations_from_toml(self, tmp_path: Path) -> None:
         """Поле confirm_file_operations читается из [safety]."""
         toml_file = tmp_path / "settings.toml"
         toml_file.write_text(
@@ -124,9 +115,7 @@ confirm_file_operations = true
 
         assert result.safety.confirm_file_operations is True
 
-    def test_confirm_file_operations_default_false(
-        self, tmp_path: Path
-    ) -> None:
+    def test_confirm_file_operations_default_false(self, tmp_path: Path) -> None:
         """Если в TOML нет поля — confirm_file_operations = False."""
         toml_file = tmp_path / "settings.toml"
         toml_file.write_text(
@@ -165,9 +154,7 @@ model = "m"
         assert config.paths.notes_dir == fake_root / "data" / "notes"
         assert config.paths.logs_dir == fake_root / "logs"
 
-    def test_relative_paths_resolved_from_project_root(
-        self, tmp_path: Path
-    ) -> None:
+    def test_relative_paths_resolved_from_project_root(self, tmp_path: Path) -> None:
         """Относительные пути в TOML резолвятся от _PROJECT_ROOT; абсолютные — как есть."""
         abs_logs = tmp_path / "absolute_logs"
         toml_file = tmp_path / "settings.toml"
@@ -184,8 +171,6 @@ logs_dir = "{abs_logs.as_posix()}"
         )
 
         result = load_config(toml_file)
-
-        from src.agent.config import _PROJECT_ROOT
 
         assert result.paths.notes_dir == _PROJECT_ROOT / "custom" / "notes"
         assert result.paths.logs_dir == abs_logs

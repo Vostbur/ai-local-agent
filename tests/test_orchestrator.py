@@ -324,3 +324,41 @@ def test_unknown_response_type_returns_error():
     assert result.steps_used == 1
     # цикл не дошёл до max_steps, значит второго вызова llm не было
     assert len(llm.calls) == 1
+
+def test_max_tool_failures_from_constructor():
+    """max_tool_failures управляет числом повторов падающего вызова."""
+    call_count = 0
+
+    def boom_tool(**kwargs) -> str:
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("boom")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="boom",
+            description="always fails",
+            parameters={"type": "object", "properties": {}},
+            func=boom_tool,
+        )
+    )
+
+    llm = FakeLLM([
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="tool_call", tool_name="boom", tool_arguments={}),
+        LLMResponse(type="final", content="done"),
+    ])
+    orchestrator = Orchestrator(llm, registry, logger, max_tool_failures=3)
+
+    result = orchestrator.run("try boom")
+
+    assert call_count == 3
+    assert result.success is True
+    tool_results = [
+        m for m in llm.calls[-1]
+        if m["role"] == "user" and m["content"].startswith("tool_result")
+    ]
+    assert any("failed 3 times" in m["content"] for m in tool_results)
