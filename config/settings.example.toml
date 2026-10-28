@@ -15,4 +15,9 @@ photos_dir = "data/photos"
 logs_dir = "logs"
 
 [safety]
-confirm_file_operations = true
+# Логика подтверждения файловых операций появится в шаге 8 (move_file).
+# Пока поле читается, но не используется.
+# confirm_file_operations = true
+
+# Сколько раз оркестратор повторит падающий вызов инструмента, прежде чем сдаться.
+max_tool_retries = 2

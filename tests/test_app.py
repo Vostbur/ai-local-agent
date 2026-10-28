@@ -90,7 +90,6 @@ def test_toml_reaches_orchestrator_and_llm(tmp_path: Path):
     toml_file.write_text(
         """\
 [llm]
-provider = "ollama"
 model = "test-model-from-toml"
 base_url = "http://test-host:11434"
 max_steps = 7
