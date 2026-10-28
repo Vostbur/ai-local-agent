@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import find_match_with_kind
-
-logger = logging.getLogger("agent")
+from src.agent.tools._search import find_match_with_kind, iter_md_files, load_note
 
 
 def search_notes(
@@ -28,27 +25,15 @@ def search_notes(
     if not query.strip() or not notes_dir.exists():
         return []
 
-    md_files = sorted(
-        p for p in notes_dir.iterdir() if p.suffix == ".md" and p.is_file()
-    )
-
     results: list[dict] = []
 
-    for path in md_files:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except Exception:
-            logger.warning("Failed to read %s", path)
+    for path in iter_md_files(notes_dir):
+        note = load_note(path)
+        if note is None:
             continue
 
-        lines = text.splitlines()
-
-        if lines and lines[0].startswith("#"):
-            title = lines[0][1:].strip()
-            body = "\n".join(lines[1:])
-        else:
-            title = path.stem
-            body = text
+        title = note["title"]
+        body = note["body"]
 
         res = find_match_with_kind(body, query)
         if res is None:

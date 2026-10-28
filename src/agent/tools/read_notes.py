@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import find_match
-
-logger = logging.getLogger("agent")
+from src.agent.tools._search import find_match, iter_md_files, load_note
 
 
 def read_notes(
@@ -33,29 +30,17 @@ def read_notes(
     if not notes_dir.exists():
         return []
 
-    md_files = sorted(
-        p for p in notes_dir.iterdir() if p.suffix == ".md" and p.is_file()
-    )
-
     results: list[dict] = []
+    stripped_query = query.strip()
 
-    for path in md_files:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except Exception:
-            logger.warning("Failed to read %s", path)
+    for path in iter_md_files(notes_dir):
+        note = load_note(path)
+        if note is None:
             continue
 
-        lines = text.splitlines()
+        title = note["title"]
+        body = note["body"]
 
-        if lines and lines[0].startswith("#"):
-            title = lines[0][1:].strip()
-            body = "\n".join(lines[1:])
-        else:
-            title = path.stem
-            body = text
-
-        stripped_query = query.strip()
         if stripped_query:
             if (
                 find_match(title, stripped_query) is None
@@ -63,13 +48,11 @@ def read_notes(
             ):
                 continue
 
-        preview = body[:200].replace("\n", " ").strip()
-
         results.append(
             {
                 "path": str(path),
                 "title": title,
-                "preview": preview,
+                "preview": body[:200].replace("\n", " ").strip(),
             }
         )
 
