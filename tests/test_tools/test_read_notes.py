@@ -54,7 +54,7 @@ def test_empty_query_respects_max_results(tmp_path: Path) -> None:
 
     result = read_notes("", tmp_path)
 
-    assert len(result) <= 50
+    assert len(result) == 50
 
 
 def test_query_matches_filename_not_title(tmp_path: Path) -> None:
@@ -136,3 +136,21 @@ def test_read_notes_default_notes_dir(
 
     assert len(result) == 1
     assert result[0]["title"] == "Test"
+
+def test_read_notes_custom_max_results(tmp_path: Path) -> None:
+    for i in range(10):
+        (tmp_path / f"note_{i}.md").write_text(
+            f"# Note {i}\ntext {i}", encoding="utf-8"
+        )
+
+    result = read_notes("", tmp_path, max_results=3)
+
+    assert len(result) == 3
+
+
+def test_tool_schema_has_max_results() -> None:
+    props = READ_NOTES_TOOL.parameters["properties"]
+
+    assert "max_results" in props
+    assert props["max_results"]["type"] == "integer"
+    assert props["max_results"].get("default") == 50

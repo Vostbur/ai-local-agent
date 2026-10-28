@@ -12,7 +12,9 @@ logger = logging.getLogger("agent")
 
 
 def read_notes(
-    query: str = "", notes_dir: Path | None = None
+    query: str = "",
+    notes_dir: Path | None = None,
+    max_results: int = 50,
 ) -> list[dict]:
     """Прочитать заметки из директории и отфильтровать по запросу.
 
@@ -20,6 +22,7 @@ def read_notes(
         query: Строка поиска (по title или имени файла).
         notes_dir: Директория с Markdown-заметками.
             Если не указана — используется ``Path("data/notes")``.
+        max_results: Максимальное число возвращаемых заметок. По умолчанию 50.
 
     Returns:
         Список словарей с полями path, title, preview.
@@ -29,8 +32,6 @@ def read_notes(
 
     if not notes_dir.exists():
         return []
-
-    max_results = 50
 
     md_files = sorted(
         p for p in notes_dir.iterdir() if p.suffix == ".md" and p.is_file()
@@ -47,7 +48,6 @@ def read_notes(
 
         lines = text.splitlines()
 
-        # title: из первой строки если начинается с #
         if lines and lines[0].startswith("#"):
             title = lines[0][1:].strip()
             body = "\n".join(lines[1:])
@@ -55,10 +55,12 @@ def read_notes(
             title = path.stem
             body = text
 
-        # filter by query — ищем по title и имени файла
         stripped_query = query.strip()
         if stripped_query:
-            if find_match(title, stripped_query) is None and find_match(path.name, stripped_query) is None:
+            if (
+                find_match(title, stripped_query) is None
+                and find_match(path.name, stripped_query) is None
+            ):
                 continue
 
         preview = body[:200].replace("\n", " ").strip()
@@ -88,6 +90,11 @@ READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
             "query": {
                 "type": "string",
                 "description": "Optional substring to match against titles and filenames (case-insensitive). Empty or missing means list all notes.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of notes to return. Default 50.",
+                "default": 50,
             },
         },
         "required": [],
