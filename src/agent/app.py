@@ -10,6 +10,10 @@ from src.agent.tools.save_note import SAVE_NOTE_TOOL
 from src.agent.tools.read_notes import READ_NOTES_TOOL
 from src.agent.tools.search_notes import SEARCH_NOTES_TOOL
 
+ALL_TOOLS = [SAVE_NOTE_TOOL, READ_NOTES_TOOL, SEARCH_NOTES_TOOL]
+
+TOOLS_WITH_NOTES_DIR = ("save_note", "read_notes", "search_notes")
+
 
 def build_orchestrator(
     config: AppConfig, logger: logging.Logger | None = None
@@ -17,24 +21,20 @@ def build_orchestrator(
     logger = logger or logging.getLogger("agent")
 
     registry = ToolRegistry()
-    registry.register(SAVE_NOTE_TOOL)
-    registry.register(READ_NOTES_TOOL)
-    registry.register(SEARCH_NOTES_TOOL)
-
-    tools = [SAVE_NOTE_TOOL, READ_NOTES_TOOL, SEARCH_NOTES_TOOL]
+    for tool in ALL_TOOLS:
+        registry.register(tool)
 
     llm = OllamaLLM(
         model=config.llm.model,
         base_url=config.llm.base_url,
-        tools=tools,
+        tools=ALL_TOOLS,
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
     )
 
     tool_context = {
-        "save_note": {"notes_dir": config.paths.notes_dir},
-        "read_notes": {"notes_dir": config.paths.notes_dir},
-        "search_notes": {"notes_dir": config.paths.notes_dir},
+        name: {"notes_dir": config.paths.notes_dir}
+        for name in TOOLS_WITH_NOTES_DIR
     }
 
     return Orchestrator(
