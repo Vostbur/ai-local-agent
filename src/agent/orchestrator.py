@@ -44,12 +44,14 @@ class Orchestrator:
         logger: logging.Logger,
         max_steps: int = 10,
         tool_context: dict[str, dict] | None = None,
+        max_tool_failures: int = MAX_TOOL_FAILURES,
     ) -> None:
         self.llm = llm
         self.registry = registry
         self.logger = logger
         self.max_steps = max_steps
         self.tool_context = tool_context or {}
+        self.max_tool_failures = max_tool_failures
 
     def run(self, goal: str) -> OrchestratorResult:
         messages: list[dict] = [
@@ -83,25 +85,25 @@ class Orchestrator:
 
                 if call_key in executed_calls:
                     tool_status = "SKIPPED"
-                    result = "was not executed again because the same call already succeeded"
+                    result = (
+                        "was not executed again because the same call already succeeded"
+                    )
                     self.logger.info("repeated tool call skipped: %s", call_key)
-                elif failed_calls.get(call_key, 0) >= MAX_TOOL_FAILURES:
+                elif failed_calls.get(call_key, 0) >= self.max_tool_failures:
                     tool_status = "ERROR"
                     result = (
-                        f"failed {MAX_TOOL_FAILURES} times in a row, giving up. "
+                        f"failed {self.max_tool_failures} times in a row, giving up. "
                         f"Do NOT call it again."
                     )
                     self.logger.info(
                         "tool %s giving up after %d failures: %s",
                         response.tool_name,
-                        MAX_TOOL_FAILURES,
+                        self.max_tool_failures,
                         call_key,
                     )
                 else:
                     try:
-                        result = self.registry.call(
-                            response.tool_name, **arguments
-                        )
+                        result = self.registry.call(response.tool_name, **arguments)
                         tool_status = "SUCCESS"
                         executed_calls.add(call_key)
                     except Exception as exc:
@@ -115,17 +117,13 @@ class Orchestrator:
                         )
                     else:
                         tool_results.append(str(result))
-                        self.logger.info(
-                            "tool %s -> %s", response.tool_name, result
-                        )
+                        self.logger.info("tool %s -> %s", response.tool_name, result)
 
                 display_args = response.tool_arguments or {}
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": (
-                            f"tool_call: {response.tool_name}({display_args})"
-                        ),
+                        "content": (f"tool_call: {response.tool_name}({display_args})"),
                     }
                 )
 
@@ -157,6 +155,4 @@ class Orchestrator:
                     tool_results=tool_results,
                 )
 
-        raise MaxStepsExceeded(
-            f"Достигнут лимит шагов: {self.max_steps}"
-        )
+        raise MaxStepsExceeded(f"Достигнут лимит шагов: {self.max_steps}")
