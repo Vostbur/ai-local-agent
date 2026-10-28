@@ -1,5 +1,6 @@
 [llm]
-model = "qwen2.5-3b-agent:latest"
+# Без тега :latest — Ollama применит его автоматически.
+model = "qwen2.5-3b-agent"
 base_url = "http://localhost:11434"
 max_steps = 10
 # Опционально: если не указать — Ollama применит свои дефолты.
@@ -8,6 +9,7 @@ max_steps = 10
 # max_tokens = 1024
 
 [paths]
+# Относительные пути резолвятся от корня проекта, а не от текущей папки.
 data_dir = "data"
 notes_dir = "data/notes"
 inbox_dir = "data/inbox"
