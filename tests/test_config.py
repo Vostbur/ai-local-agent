@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from src.agent.config import AppConfig, LLMConfig, PathsConfig, SafetyConfig, load_config
+from src.agent.config import (
+    AppConfig,
+    LLMConfig,
+    PathsConfig,
+    SafetyConfig,
+    _PROJECT_ROOT,
+    load_config,
+)
 
 
 class TestLoadConfig:
@@ -38,11 +45,11 @@ allow_network = true
 
         assert isinstance(result, AppConfig)
         assert result.llm == LLMConfig(model="gpt-4", temperature=0.5, max_tokens=2048)
-        assert result.paths == PathsConfig(
-            memory=Path("my_memory"),
-            tools=Path("my_tools"),
-            logs_dir=Path("my_logs"),
-        )
+
+        assert result.paths.memory == _PROJECT_ROOT / "my_memory"
+        assert result.paths.tools == _PROJECT_ROOT / "my_tools"
+        assert result.paths.logs_dir == _PROJECT_ROOT / "my_logs"
+        assert result.paths.notes_dir == _PROJECT_ROOT / "data" / "notes"
         assert result.safety == SafetyConfig(
             max_tool_retries=5,
             allow_shell=True,
@@ -91,7 +98,6 @@ max_tokens = 1024
 
         result = load_config(toml_file)
 
-        assert result.llm.provider == "llamacpp"
         assert result.llm.model == "custom-model"
         assert result.llm.base_url == "http://custom:8080"
         assert result.llm.max_steps == 5
@@ -134,3 +140,52 @@ model = "m"
         result = load_config(toml_file)
 
         assert result.safety.confirm_file_operations is False
+
+    def test_load_config_from_non_project_cwd(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """load_config() ищет settings.toml от _PROJECT_ROOT, а не от CWD."""
+        import src.agent.config as cfg_module
+
+        fake_root = tmp_path / "fake_project"
+        (fake_root / "config").mkdir(parents=True)
+        (fake_root / "config" / "settings.toml").write_text(
+            '[llm]\nmodel = "fake"\n', encoding="utf-8"
+        )
+
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        monkeypatch.setattr(cfg_module, "_PROJECT_ROOT", fake_root)
+        monkeypatch.chdir(elsewhere)
+
+        config = load_config()
+
+        assert config.llm.model == "fake"
+        assert config.paths.notes_dir == fake_root / "data" / "notes"
+        assert config.paths.logs_dir == fake_root / "logs"
+
+    def test_relative_paths_resolved_from_project_root(
+        self, tmp_path: Path
+    ) -> None:
+        """Относительные пути в TOML резолвятся от _PROJECT_ROOT; абсолютные — как есть."""
+        abs_logs = tmp_path / "absolute_logs"
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            f"""\
+[llm]
+model = "m"
+
+[paths]
+notes_dir = "custom/notes"
+logs_dir = "{abs_logs.as_posix()}"
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        from src.agent.config import _PROJECT_ROOT
+
+        assert result.paths.notes_dir == _PROJECT_ROOT / "custom" / "notes"
+        assert result.paths.logs_dir == abs_logs

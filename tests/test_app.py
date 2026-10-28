@@ -18,7 +18,6 @@ from src.agent.registry import ToolRegistry
 def _make_config() -> AppConfig:
     return AppConfig(
         llm=LLMConfig(
-            provider="ollama",
             model="test-model",
             base_url="http://localhost:11434",
             max_steps=3,

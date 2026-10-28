@@ -1,5 +1,4 @@
 [llm]
-provider = "ollama"          # ollama или llamacpp
 model = "qwen2.5-3b-agent:latest"
 base_url = "http://localhost:11434"
 max_steps = 10
