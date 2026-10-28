@@ -2,6 +2,7 @@
 
 import json
 import logging
+
 import requests
 
 from src.agent.llm import LLMResponse
@@ -24,10 +25,13 @@ class OllamaLLM:
         self.tools = tools or []
 
     def chat(self, messages: list[dict]) -> LLMResponse:
+        last = messages[-1] if messages else {}
         logger.info(
-            "Ollama request: model=%s, messages=%s",
+            "Ollama request: model=%s, messages_count=%d, last_role=%s, last_len=%d",
             self.model,
-            messages,
+            len(messages),
+            last.get("role"),
+            len(last.get("content") or ""),
         )
 
         tools_payload = None
@@ -63,14 +67,54 @@ class OllamaLLM:
         except requests.RequestException as exc:
             raise RuntimeError(f"Ollama request failed: {exc}")
 
-        data = resp.json()
-        msg = data["choices"][0]["message"]
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Ollama returned invalid JSON: {exc}")
 
-        tool_calls = msg.get("tool_calls")
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"Ollama returned unexpected JSON type: {type(data).__name__}"
+            )
+
+        choices = data.get("choices")
+        if not choices:
+            raise RuntimeError("Ollama response has no choices")
+
+        message = choices[0].get("message")
+        if not isinstance(message, dict):
+            raise RuntimeError("Ollama response has no message in first choice")
+
+        tool_calls = message.get("tool_calls")
         if tool_calls:
+            if len(tool_calls) > 1:
+                logger.warning(
+                    "Ollama returned %d tool_calls, using the first one",
+                    len(tool_calls),
+                )
+
             tc = tool_calls[0]
-            name = tc["function"]["name"]
-            args = json.loads(tc["function"]["arguments"])
+            try:
+                name = tc["function"]["name"]
+                raw_args = tc["function"]["arguments"]
+            except (KeyError, TypeError) as exc:
+                raise RuntimeError(
+                    f"Ollama tool_call has invalid structure: {exc}"
+                )
+
+            try:
+                args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"Ollama tool_call has invalid JSON arguments: {exc}"
+                )
+
+            if not isinstance(args, dict):
+                raise RuntimeError(
+                    f"Ollama tool_call arguments is not an object: "
+                    f"{type(args).__name__}"
+                )
+
             logger.info("Ollama response: type=tool_call, tool_name=%s", name)
             return LLMResponse(
                 type="tool_call",
@@ -79,4 +123,4 @@ class OllamaLLM:
             )
 
         logger.info("Ollama response: type=final")
-        return LLMResponse(type="final", content=msg.get("content"))
+        return LLMResponse(type="final", content=message.get("content"))
