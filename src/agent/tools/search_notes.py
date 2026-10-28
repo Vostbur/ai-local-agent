@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
@@ -31,7 +32,6 @@ def search_notes(
         p for p in notes_dir.iterdir() if p.suffix == ".md" and p.is_file()
     )
 
-    q = query.lower()
     results: list[dict] = []
 
     for path in md_files:
@@ -43,7 +43,6 @@ def search_notes(
 
         lines = text.splitlines()
 
-        # title: из первой строки если начинается с #
         if lines and lines[0].startswith("#"):
             title = lines[0][1:].strip()
             body = "\n".join(lines[1:])
@@ -55,12 +54,13 @@ def search_notes(
         if res is None:
             continue
 
-        start, end, kind = res
+        start, _end, kind = res
 
         if kind == "exact":
             matches = body.lower().count(query.lower())
         else:  # kind == "stem"
-            matches = body.lower().count(query[:-2].lower())
+            stem = query[:-2].lower()
+            matches = len(re.findall(rf"\b{re.escape(stem)}", body.lower()))
 
         # snippet: строка с совпадением + одна до и одна после
         line_start = body.rfind("\n", 0, start) + 1
@@ -75,26 +75,23 @@ def search_notes(
             context_lines.append(body[prev_line_start:line_start])
             has_prev = True
         context_lines.append(body[line_start:line_end])
+
+        has_next = False
         next_line_start = line_end + 1
         if next_line_start < len(body):
             next_line_end = body.find("\n", next_line_start)
             if next_line_end == -1:
                 next_line_end = len(body)
             context_lines.append(body[next_line_start:next_line_end])
+            has_next = next_line_end < len(body)
 
         snippet = " ".join(context_lines).strip()
 
-        ellipsis_prefix = ""
-        ellipsis_suffix = ""
-
-        if len(snippet) > 300:
+        ellipsis_prefix = "…" if has_prev else ""
+        trimmed_right = len(snippet) > 300
+        if trimmed_right:
             snippet = snippet[:300]
-            if has_prev:
-                ellipsis_prefix = "…"
-            ellipsis_suffix = "…"
-        else:
-            if has_prev:
-                ellipsis_prefix = "…"
+        ellipsis_suffix = "…" if (trimmed_right or has_next) else ""
 
         results.append(
             {

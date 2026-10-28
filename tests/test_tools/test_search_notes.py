@@ -90,3 +90,46 @@ def test_exact_match_still_works(tmp_path: Path) -> None:
     result = search_notes("молоко", tmp_path)
 
     assert result[0]["matches"] == 1
+
+def test_stem_match_word_boundary(tmp_path: Path) -> None:
+    """matches для stem считает только вхождения на границе слова."""
+    note = tmp_path / "test.md"
+    note.write_text(
+        "# Test\n\nдокументов и недокументированный",
+        encoding="utf-8",
+    )
+
+    result = search_notes("документы", tmp_path)
+
+    assert len(result) == 1
+    # "документов" начинается с "докумен" (совпадение),
+    # "недокументированный" содержит "докумен" внутри слова (не считается).
+    assert result[0]["matches"] == 1
+
+
+def test_snippet_suffix_when_more_content_after(tmp_path: Path) -> None:
+    """Если после snippet есть ещё текст — добавляется суффикс «…»."""
+    note = tmp_path / "test.md"
+    note.write_text(
+        "# Test\n\nхлеб\nкупить молоко\nи другие дела",
+        encoding="utf-8",
+    )
+
+    result = search_notes("хлеб", tmp_path)
+
+    assert len(result) == 1
+    assert result[0]["snippet"].endswith("…")
+
+
+def test_no_snippet_suffix_at_end_of_file(tmp_path: Path) -> None:
+    """Если snippet заканчивается в конце файла — суффикса нет."""
+    note = tmp_path / "test.md"
+    note.write_text(
+        "# Test\n\nхлеб и молоко",
+        encoding="utf-8",
+    )
+
+    result = search_notes("хлеб", tmp_path)
+
+    assert len(result) == 1
+    assert not result[0]["snippet"].endswith("…")
