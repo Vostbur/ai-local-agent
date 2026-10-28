@@ -104,15 +104,13 @@
 - [x] **T18.** `search_notes` прекращает чтение при `max_results`.
 
 ## Шаг 6.7. Пути, CLI и честный safety ✅
-Закрыты новые находки второго ревью (T14, T21, T23–T27).
 - [x] **T14 + T22.** `pyproject.toml`, `src/__init__.py`, `_PROJECT_ROOT`; `load_config` и `PathsConfig` резолвят пути от корня проекта, а не от CWD.
 - [x] **T21 + T27.** `max_tool_retries` из `SafetyConfig` в `Orchestrator.__init__`; убраны `allow_shell`, `allow_network`, `provider`; `confirm_file_operations` убран из example до шага 8.
 - [x] **T23.** CLI печатает `result.error` при `success=False`.
 - [x] **T24.** `max_results=None` (3B передаёт `null`) и `<= 0` в `read_notes`/`search_notes`.
 - [x] **T25.** Логи без `preview`/`snippet` — `_summarize_for_log` сворачивает списки в `list[N]`.
 - [x] **T26.** Промпт `save_note` не просит выдумывать `title` — «ask the user for clarification».
-
-После 6.7 — `pytest -v`, контрольный прогон 3–5 сценариев. Доки (T32) — отдельным коммитом.
+- [x] **T32.** Документация синхронизирована с кодом: `README.md`, `ARCHITECTURE.md`, `config/settings.example.toml`.
 
 ## Шаг 7. Документы и RAG
 - [ ] Извлечение текста из PDF (PyMuPDF).
@@ -164,7 +162,7 @@
 4. **Уточнённые описания и `SYSTEM_PROMPT`** (6.4): противопоставление `read_notes`/`search_notes`, русские триггеры.
 5. **Лимит падений** (6.5, T11): после `max_tool_failures` неудач — `ERROR` с `Do NOT call it again`.
 6. **Неизвестный `response.type`** (6.6, T16): `OrchestratorResult(success=False)`, без зацикливания.
-7. **`max_results=None`** (6.7, T24): 3B передаёт `null` для опциональных полей — инструменты теперь это переживают.
+7. **`max_results=None`** (6.7, T24): 3B передаёт `null` для опциональных полей — инструменты это переживают.
 8. **Промпт `save_note`** (6.7, T26): больше не просит выдумывать заголовок.
 9. **Контрольный прогон 10/10** (2026-10-26) не выявил зацикливаний.
 
@@ -176,4 +174,4 @@
 2. `temperature = 0.3` в `config/settings.toml` (механизм проброса — в 6.5, T10).
 
 ## Технический долг
-См. `TODO.md`. Шаги 6.5–6.7 закрыли 🔴 и 🟡. Открытые пункты — ⚪ (T19, T28–T33), не блокируют шаг 7.
+См. `TODO.md`. Шаги 6.5–6.7 закрыли 🔴 и 🟡, а также T32. Открытые пункты — ⚪ (T19, T28–T31, T33), не блокируют шаг 7.

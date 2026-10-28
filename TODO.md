@@ -1,6 +1,6 @@
 # TODO
 
-Мелкие исправления, технический долг и известные компромиссы. Не привязаны к шагам плана (`TASKS.md`), но шаги 6.5–6.7 закрыли критическую и среднюю части.
+Мелкие исправления, технический долг и известные компромиссы. Не привязаны к шагам плана (`TASKS.md`), но шаги 6.5–6.7 закрыли критическую, среднюю части и T32.
 
 Статусы: `[ ]` — не сделано, `[x]` — сделано.
 
@@ -58,18 +58,10 @@
 **Исправить:** при `final` с пустым/`None` `content` — `success=False, error="empty final answer"`.
 **Приоритет:** спорно (3B может давать пустой финал как «сигнал завершения»). Отложить до данных.
 
-### T32. Дрифт документации
-**Файлы:** `README.md`, `ARCHITECTURE.md`, `config/settings.example.toml`
-**Проблема:**
-- README утверждает, что «документы» не найдёт «документация» — `query[:-2]` = «документ», это подстрока, найдёт;
-- `settings.example.toml` с `:latest`, README без тега;
-- `ARCHITECTURE.md` не отражает `SKIPPED`, `ALL_TOOLS`, T16, T25.
-**Исправить:** одним коммитом после шага 6.7.
-
 ### T33. Дублирующий импорт в `test_search_helper.py`
 **Файл:** `tests/test_tools/test_search_helper.py`
 **Проблема:** возможно, `find_match` импортирован дважды (после T6 добавились `iter_md_files`, `load_note`).
-**Исправить:** проверить шапку, убрать дубль.
+**Исправить:** проверить шапку файла, убрать дубль.
 
 ---
 
@@ -130,10 +122,11 @@ T15 ввёл `ALL_TOOLS`, но `TOOLS_WITH_NOTES_DIR` остался вторы�
 - [x] **T18.** `search_notes` прекращает чтение при `max_results`.
 - [x] **T20.** Убран мёртвый `path.read_bytes()`.
 
-### Шаг 6.7: пути, CLI, честный safety
+### Шаг 6.7: пути, CLI, честный safety, документация
 - [x] **T14 + T22.** `pyproject.toml`, `src/__init__.py`, `_PROJECT_ROOT`; `load_config` и `PathsConfig` резолвят пути от корня проекта.
 - [x] **T21 + T27.** `max_tool_retries` из `SafetyConfig` в `Orchestrator.__init__`; убраны `allow_shell`, `allow_network`, `provider`; `confirm_file_operations` убран из example до шага 8.
 - [x] **T23.** CLI печатает `result.error` при `success=False`.
 - [x] **T24.** `max_results=None` и `<= 0` в `read_notes`/`search_notes`.
 - [x] **T25.** Логи без `preview`/`snippet` — `_summarize_for_log`.
 - [x] **T26.** Промпт `save_note` не просит выдумывать `title`.
+- [x] **T32.** Документация синхронизирована с кодом: `README.md`, `ARCHITECTURE.md`, `config/settings.example.toml`.
