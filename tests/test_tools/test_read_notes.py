@@ -154,3 +154,31 @@ def test_tool_schema_has_max_results() -> None:
     assert "max_results" in props
     assert props["max_results"]["type"] == "integer"
     assert props["max_results"].get("default") == 50
+
+
+def test_read_notes_none_max_results_uses_default(tmp_path: Path) -> None:
+    """max_results=None (как передаёт модель) не ломает read_notes."""
+    for i in range(3):
+        (tmp_path / f"note_{i}.md").write_text(
+            f"# Note {i}", encoding="utf-8"
+        )
+
+    result = read_notes("", tmp_path, max_results=None)
+
+    assert len(result) == 3
+
+
+def test_read_notes_zero_max_results_returns_empty(tmp_path: Path) -> None:
+    (tmp_path / "note.md").write_text("# Note", encoding="utf-8")
+
+    result = read_notes("", tmp_path, max_results=0)
+
+    assert result == []
+
+
+def test_read_notes_negative_max_results_returns_empty(tmp_path: Path) -> None:
+    (tmp_path / "note.md").write_text("# Note", encoding="utf-8")
+
+    result = read_notes("", tmp_path, max_results=-5)
+
+    assert result == []

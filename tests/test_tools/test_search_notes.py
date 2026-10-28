@@ -144,3 +144,28 @@ def test_max_results_reads_until_skipped_files_found(tmp_path: Path) -> None:
 
     result = search_notes("query", tmp_path, max_results=2)
     assert len(result) == 2
+
+
+def test_search_notes_none_max_results_uses_default(tmp_path: Path) -> None:
+    """max_results=None (как передаёт модель) не ломает search_notes."""
+    (tmp_path / "note.md").write_text("# Note\nquery text", encoding="utf-8")
+
+    result = search_notes("query", tmp_path, max_results=None)
+
+    assert len(result) == 1
+
+
+def test_search_notes_zero_max_results_returns_empty(tmp_path: Path) -> None:
+    (tmp_path / "note.md").write_text("# Note\nquery text", encoding="utf-8")
+
+    result = search_notes("query", tmp_path, max_results=0)
+
+    assert result == []
+
+
+def test_search_notes_negative_max_results_returns_empty(tmp_path: Path) -> None:
+    (tmp_path / "note.md").write_text("# Note\nquery text", encoding="utf-8")
+
+    result = search_notes("query", tmp_path, max_results=-1)
+
+    assert result == []

@@ -11,7 +11,7 @@ from src.agent.tools._search import find_match, iter_md_files, load_note
 def read_notes(
     query: str = "",
     notes_dir: Path | None = None,
-    max_results: int = 50,
+    max_results: int | None = 50,
 ) -> list[dict]:
     """Прочитать заметки из директории и отфильтровать по запросу.
 
@@ -19,11 +19,17 @@ def read_notes(
         query: Строка поиска (по title или имени файла).
         notes_dir: Директория с Markdown-заметками.
             Если не указана — используется ``Path("data/notes")``.
-        max_results: Максимальное число возвращаемых заметок. По умолчанию 50.
+        max_results: Максимальное число возвращаемых заметок.
+            ``None`` — использовать дефолт 50; ``<= 0`` — вернуть пустой список.
 
     Returns:
         Список словарей с полями path, title, preview.
     """
+    if max_results is None:
+        max_results = 50
+    if max_results <= 0:
+        return []
+
     if notes_dir is None:
         notes_dir = Path("data/notes")
 

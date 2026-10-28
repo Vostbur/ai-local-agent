@@ -10,19 +10,25 @@ from src.agent.tools._search import find_match_with_kind, iter_md_files, load_no
 
 
 def search_notes(
-    query: str, notes_dir: Path, max_results: int = 5
+    query: str, notes_dir: Path, max_results: int | None = 5
 ) -> list[dict]:
     """Поиск Markdown-заметок по вхождению запроса в тело документа.
 
     Args:
         query: Строка поиска (ищется в body).
         notes_dir: Директория с Markdown-заметками.
-        max_results: Максимальное число результатов. Чтение прекращается,
+        max_results: Максимальное число результатов. ``None`` — дефолт 5;
+            ``<= 0`` — вернуть пустой список. Чтение прекращается,
             как только найдено нужное число совпадений.
 
     Returns:
         Список словарей с полями path, title, snippet, matches.
     """
+    if max_results is None:
+        max_results = 5
+    if max_results <= 0:
+        return []
+
     if not query.strip() or not notes_dir.exists():
         return []
 
