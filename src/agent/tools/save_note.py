@@ -30,7 +30,7 @@ def save_note(title: str, content: str, notes_dir: Path) -> Path:
 
     slug = title.lower()
     slug = slug.replace(" ", "_")
-    slug = re.sub(r'[<>:"/\\|?*?]', "", slug)
+    slug = re.sub(r'[<>:"/\\|?*]', "", slug)
     slug = re.sub(r"[\u0000-\u001f\u007f-\u009f]", "", slug)
     slug = "".join(
         ch
