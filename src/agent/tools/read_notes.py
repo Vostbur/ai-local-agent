@@ -11,16 +11,22 @@ from src.agent.tools._search import find_match
 logger = logging.getLogger("agent")
 
 
-def read_notes(query: str = "", notes_dir: Path = ...) -> list[dict]:
+def read_notes(
+    query: str = "", notes_dir: Path | None = None
+) -> list[dict]:
     """Прочитать заметки из директории и отфильтровать по запросу.
 
     Args:
         query: Строка поиска (по title или имени файла).
         notes_dir: Директория с Markdown-заметками.
+            Если не указана — используется ``Path("data/notes")``.
 
     Returns:
         Список словарей с полями path, title, preview.
     """
+    if notes_dir is None:
+        notes_dir = Path("data/notes")
+
     if not notes_dir.exists():
         return []
 

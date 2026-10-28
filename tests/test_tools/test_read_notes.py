@@ -122,3 +122,17 @@ def test_read_notes_without_query_returns_all(tmp_path: Path) -> None:
 
 def test_tool_schema_query_not_required() -> None:
     assert "required" not in READ_NOTES_TOOL.parameters or "query" not in READ_NOTES_TOOL.parameters.get("required", [])
+
+def test_read_notes_default_notes_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Вызов без notes_dir не падает и использует Path('data/notes')."""
+    monkeypatch.chdir(tmp_path)
+    default_dir = tmp_path / "data" / "notes"
+    default_dir.mkdir(parents=True)
+    (default_dir / "test.md").write_text("# Test\n\nbody", encoding="utf-8")
+
+    result = read_notes("")
+
+    assert len(result) == 1
+    assert result[0]["title"] == "Test"
