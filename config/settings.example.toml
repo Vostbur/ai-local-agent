@@ -1,5 +1,6 @@
 [llm]
 # Без тега :latest — Ollama применит его автоматически.
+# 7B — рекомендуется (лучше routing). 3B — быстрее, но путает инструменты.
 model = "qwen2.5-7b-agent"
 base_url = "http://localhost:11434"
 max_steps = 10

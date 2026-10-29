@@ -1,2 +1,4 @@
-FROM qwen2.5:7b
+# Модель 3B: быстрее на CPU, но слабее в routing инструментов.
+# Для лучшего качества используйте Modelfile.7b (см. README).
+FROM qwen2.5:3b
 PARAMETER num_ctx 8192
