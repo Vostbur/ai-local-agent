@@ -14,6 +14,9 @@ data_dir = "data"
 notes_dir = "data/notes"
 inbox_dir = "data/inbox"
 photos_dir = "data/photos"
+# Корень корпуса документов для RAG. Относительный путь — от корня проекта.
+documents_dir = "data/documents"
+
 logs_dir = "logs"
 
 [safety]

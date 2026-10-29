@@ -43,6 +43,7 @@ class PathsConfig:
         notes_dir: Путь к директории заметок.
         inbox_dir: Путь к входящим.
         photos_dir: Путь к фотографиям.
+        documents_dir: Корпус документов для RAG (Markdown, TXT, позже PDF/DOCX).
         logs_dir: Путь к директории логов.
         memory: Путь к директории памяти.
         tools: Путь к директории инструментов.
@@ -52,6 +53,7 @@ class PathsConfig:
     notes_dir: Path = Path("data/notes")
     inbox_dir: Path = Path("data/inbox")
     photos_dir: Path = Path("data/photos")
+    documents_dir: Path = Path("data/documents")
     logs_dir: Path = Path("logs")
     memory: Path = Path("memory")
     tools: Path = Path("tools")
@@ -128,6 +130,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         notes_dir=_resolve_path(paths_raw.get("notes_dir", "data/notes")),
         inbox_dir=_resolve_path(paths_raw.get("inbox_dir", "data/inbox")),
         photos_dir=_resolve_path(paths_raw.get("photos_dir", "data/photos")),
+        documents_dir=_resolve_path(paths_raw.get("documents_dir", "data/documents")),
         logs_dir=_resolve_path(paths_raw.get("logs_dir", "logs")),
         memory=_resolve_path(paths_raw.get("memory", "memory")),
         tools=_resolve_path(paths_raw.get("tools", "tools")),

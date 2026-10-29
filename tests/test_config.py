@@ -174,3 +174,36 @@ logs_dir = "{abs_logs.as_posix()}"
 
         assert result.paths.notes_dir == _PROJECT_ROOT / "custom" / "notes"
         assert result.paths.logs_dir == abs_logs
+
+    def test_documents_dir_from_toml(self, tmp_path: Path) -> None:
+        """documents_dir берётся из [paths] documents_dir в TOML."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+
+[paths]
+documents_dir = "custom/docs"
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.paths.documents_dir == _PROJECT_ROOT / "custom" / "docs"
+
+    def test_documents_dir_default(self, tmp_path: Path) -> None:
+        """Если в TOML нет documents_dir — используется значение по умолчанию."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.paths.documents_dir == _PROJECT_ROOT / "data" / "documents"
