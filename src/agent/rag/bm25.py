@@ -93,9 +93,22 @@ class BM25Index:
         return chunk.text
 
     def search(
-        self, query: str, top_k: int = 5
+        self,
+        query: str,
+        top_k: int = 5,
+        min_idf: float = 2.0,
     ) -> list[tuple[Chunk, float]]:
         """Найти top_k чанков по BM25.
+
+        Args:
+            query: запрос.
+            top_k: сколько вернуть.
+            min_idf: порог IDF. Токены запроса с IDF ниже порога
+                отбрасываются как corpus-specific stop words. Порог 2.0
+                подобран эмпирически для корпуса ~100 чанков: отбрасывает
+                «с», «агент», «как установить» в общем контексте, но
+                оставляет «как», «устан», «нуля» в запросе про установку.
+                Если все токены ниже — fallback на оригинальные токены.
 
         Возвращает список (chunk, score), отсортированный по убыванию score.
         Чанки с score == 0 не попадают в результат.
@@ -103,6 +116,14 @@ class BM25Index:
         query_tokens = _tokenize(query)
         if not query_tokens:
             return []
+
+        # Отбросить corpus-specific stop words (низкий IDF)
+        filtered = [
+            t for t in query_tokens if self._idf.get(t, 0.0) >= min_idf
+        ]
+        if filtered:
+            query_tokens = filtered
+        # если все токены ниже порога — оставить как есть
 
         scores: list[float] = [0.0] * len(self.chunks)
         for term in set(query_tokens):
