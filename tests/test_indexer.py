@@ -55,10 +55,11 @@ def test_multiple_files_with_nested_dirs(tmp_path: Path) -> None:
 
 def test_ignores_unknown_extensions(tmp_path: Path) -> None:
     (tmp_path / "file.md").write_text("# Title\n\nContent.", encoding="utf-8")
-    (tmp_path / "file.pdf").write_bytes(b"%PDF-1.4 fake")
+    (tmp_path / "file.xyz").write_bytes(b"unknown format")
     (tmp_path / "file.json").write_text('{"a": 1}', encoding="utf-8")
     result = index_documents(tmp_path, logger)
     assert result.files_found == 1
+    assert result.files_processed == 1
 
 
 def test_ignores_subdirectory_markers(tmp_path: Path) -> None:
