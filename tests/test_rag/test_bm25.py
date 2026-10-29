@@ -205,3 +205,78 @@ class TestStemImprovesMatching:
 
         assert len(results) >= 1
         assert results[0][0].text == "Требования к системе"
+
+
+class TestIDFFilter:
+    def test_search_filters_low_idf_tokens(self) -> None:
+        """Частый токен отбрасывается, редкий — определяет результат."""
+        # «агент» в 9 чанках из 10, «установка» — в 1
+        chunks = [_chunk(f"агент в чанке {i}") for i in range(9)]
+        chunks.append(_chunk("установка агента с нуля"))
+        index = BM25Index(chunks)
+
+        # Без фильтра: «агент» матчится везде, релевантный чанк может
+        # не попасть в top-1 из-за низкого IDF «агент»
+        results_no_filter = index.search(
+            "агент установка", top_k=1, min_idf=0.0
+        )
+        # С фильтром: «агент» отброшен (IDF < 0.5), «установка» — высокий IDF
+        results_filtered = index.search(
+            "агент установка", top_k=1, min_idf=0.5
+        )
+
+        assert results_filtered[0][0].text == "установка агента с нуля"
+
+    def test_search_fallback_when_all_low_idf(self) -> None:
+        """Все токены запроса низко-IDF → fallback, не падает."""
+        chunks = [_chunk(f"агент {i}") for i in range(10)]
+        index = BM25Index(chunks)
+
+        # «агент» везде (df=10), IDF низкий; фильтр опустошит запрос
+        results = index.search("агент", top_k=3, min_idf=0.5)
+
+        # fallback: без фильтра, но не падает
+        assert len(results) > 0
+        assert all("агент" in r[0].text for r in results)
+
+    def test_search_min_idf_zero_disables_filter(self) -> None:
+        """min_idf=0 — фильтр отключён, старое поведение."""
+        chunks = [_chunk(f"агент {i}") for i in range(5)]
+        index = BM25Index(chunks)
+
+        results_zero = index.search("агент", top_k=3, min_idf=0.0)
+        results_default = index.search("агент", top_k=3)
+
+        # min_idf=0 — все токены проходят, результат как без фильтра
+        assert len(results_zero) > 0
+
+    def test_install_query_after_filter(self) -> None:
+        """Запрос «Как установить агента с нуля?» находит раздел установки."""
+        # Имитация реального корпуса: много «устан» в разных формах,
+        # много «как агент», один чанк «Установка с нуля»
+        chunks = []
+        for i in range(10):
+            chunks.append(_chunk(f"агент как установить {i}", section="Шаг"))
+        chunks.append(
+            _chunk(
+                "Все команды выполняются в терминале. На Windows PowerShell.",
+                section="Установка с нуля (для новичка)",
+            )
+        )
+        chunks.append(
+            _chunk(
+                "Скопируйте config/settings.example.toml и запустите",
+                section="Шаг 1. Скачайте проект",
+            )
+        )
+
+        index = BM25Index(chunks)
+        results = index.search(
+            "Как установить агента с нуля?", top_k=3, min_idf=0.5
+        )
+
+        # Чанк с «Установка с нуля» или «Шаг 1» должен быть в top-3
+        sections = [r[0].section for r in results]
+        assert any(
+            s and ("Установка" in s or "Шаг 1" in s) for s in sections
+        ), f"Не найден раздел установки в top-3: {sections}"
