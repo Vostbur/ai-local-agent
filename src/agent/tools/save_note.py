@@ -9,11 +9,28 @@ from pathlib import Path
 from src.agent.registry import ToolDefinition
 
 _WINDOWS_RESERVED = {
-    "con", "prn", "aux", "nul",
-    "com1", "com2", "com3", "com4", "com5",
-    "com6", "com7", "com8", "com9",
-    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5",
-    "lpt6", "lpt7", "lpt8", "lpt9",
+    "con",
+    "prn",
+    "aux",
+    "nul",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
 }
 
 
@@ -30,9 +47,7 @@ def _make_slug(title: str) -> str:
     slug = "".join(
         ch
         for ch in slug
-        if unicodedata.category(ch).startswith("L")
-        or ch in ("_", "-")
-        or ch.isdigit()
+        if unicodedata.category(ch).startswith("L") or ch in ("_", "-") or ch.isdigit()
     )
     slug = slug[:100]
     # Belt-and-braces: обрезать trailing точки/пробелы на случай,
@@ -79,13 +94,18 @@ def save_note(title: str, content: str, notes_dir: Path) -> Path:
 
 SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
     name="save_note",
-    description='Save a note to a Markdown file. Use when the user asks to: сохранить заметку, записать заметку, создать заметку, занести в заметки, save a note, write a note, create a note. Creates a new file; never overwrites.',
+    description="Save a note to a Markdown file. Use when the user asks to: сохранить заметку, записать заметку, создать заметку, занести в заметки, save a note, write a note, create a note. Creates a new file; never overwrites.",
     parameters={
         "type": "object",
         "properties": {
             "title": {
                 "type": "string",
-                "description": "Note title, used as filename. Example: 'Список покупок'. If the user did not specify an explicit title, do NOT invent one — ask the user for clarification instead.",            },
+                "description": (
+                    "Note title, used as filename. Example: 'Список покупок'. "
+                    "If the user did not specify an explicit title, "
+                    "do NOT invent one — ask the user for clarification instead."
+                ),
+            },
             "content": {
                 "type": "string",
                 "description": "Note body in Markdown. If the user did not provide content, use an empty string.",
