@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .base import ExtractedDocument, TextExtractor
 from .markdown import MarkdownExtractor
+from .pdf import PdfExtractor
 from .txt import TxtExtractor
 
 logger = logging.getLogger(__name__)
@@ -38,3 +39,4 @@ def extract_text(path: Path) -> ExtractedDocument | None:
 
 register(MarkdownExtractor().supported_suffixes(), MarkdownExtractor())
 register(TxtExtractor.supported_suffixes, TxtExtractor())
+register(PdfExtractor().supported_suffixes(), PdfExtractor())

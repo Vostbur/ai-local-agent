@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pymupdf
 import pytest
 
 from src.agent.extractors import extract_text, register
@@ -60,10 +61,28 @@ class TestExtractText:
         assert result.path == md
         assert result.segments[0].section == "H"
 
+    def test_extract_text_dispatches_to_pdf(self, tmp_path: Path):
+        doc = pymupdf.open()
+        page = doc.new_page(width=595, height=842)
+        page.insert_htmlbox(
+            pymupdf.Rect(50, 50, 550, 750), "<p>Тест</p>"
+        )
+        path = tmp_path / "test.pdf"
+        doc.save(path)
+        doc.close()
+
+        result = extract_text(path)
+
+        assert isinstance(result, ExtractedDocument)
+        assert result.segments[0].section == "Страница 1"
+        assert "Тест" in result.segments[0].text
+
     def test_extract_text_unknown_suffix_returns_none(
         self, tmp_path: Path, caplog
     ):
-        unknown = tmp_path / "file.pdf"
+        # .xyz не зарегистрирован ни одним экстрактором.
+        # .pdf раньше был «неизвестным», но с 7.4 зарегистрирован.
+        unknown = tmp_path / "file.xyz"
         unknown.write_bytes(b"")
 
         with caplog.at_level("WARNING", logger="agent"):
@@ -71,7 +90,6 @@ class TestExtractText:
 
         assert result is None
         assert "no extractor" in caplog.text.lower()
-        assert ".pdf" in caplog.text
 
     def test_extract_text_extractor_exception_returns_none(
         self, clean_registry, tmp_path: Path, caplog
