@@ -1,6 +1,6 @@
 [llm]
 # Без тега :latest — Ollama применит его автоматически.
-model = "qwen2.5-3b-agent"
+model = "qwen2.5-7b-agent"
 base_url = "http://localhost:11434"
 max_steps = 10
 # Опционально: если не указать — Ollama применит свои дефолты.

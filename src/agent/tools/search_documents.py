@@ -72,14 +72,13 @@ def search_documents(query: str, top_k: int = 5) -> list[dict]:
 SEARCH_DOCUMENTS_TOOL: ToolDefinition = ToolDefinition(
     name="search_documents",
     description=(
-        "Search INSIDE the user's documents (Markdown, TXT, later PDF/DOCX) "
-        "for semantically relevant fragments. Use when the user asks what is "
-        "written in their documents, files, corpus, knowledge base, or asks "
-        "for facts from their documents: \"что в документах\", "
-        "\"найди в документах\", \"что написано в файлах\", "
-        "\"search my documents\", \"find in docs\". Returns top matching "
-        "fragments with source path, section and relevance score. "
-        "Do NOT use for personal notes — use search_notes for that."
+        "Search the user's DOCUMENTS (README, articles, project files, "
+        "knowledge base) — NOT personal notes. ALWAYS use when the user "
+        "asks about: требования, установка, запуск, что умеет проект, "
+        "возможности, лицензия, статьи, документация, README, исходный код, "
+        "версия Python, файлы проекта. Returns matching fragments with "
+        "source path, section and relevance score. "
+        "For personal notes, use search_notes."
     ),
     parameters={
         "type": "object",

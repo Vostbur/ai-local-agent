@@ -102,7 +102,12 @@ def search_notes(
 SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
     name="search_notes",
     description=(
-        "Search INSIDE note bodies (content) for a substring and return snippets. Use this when the user asks: \"в какой заметке я упоминал\", \"найди, что я писал про\", \"поиск по содержимому\", \"which note mentions\", \"search inside notes\", \"what did I write about\". Do NOT use this for finding a note by its title — use read_notes for that. Returns path, title, snippet, matches."
+        "Search the user's PERSONAL NOTES (in data/notes/, created via save_note) "
+        "— NOT documents, README, or project files. Use only when the user "
+        "explicitly asks about their own notes: \"мои заметки\", \"что я записал\", "
+        "\"найди заметку\", \"my notes\", \"what did I write\". "
+        "For documents, README, articles, project files — use search_documents. "
+        "Returns path, title, snippet, matches."
     ),
     parameters={
         "type": "object",

@@ -390,3 +390,20 @@ def test_tool_result_not_logged_in_full(caplog):
     assert result.success is True
     assert "SECRET_NOTE_TEXT" not in caplog.text
     assert "list[1]" in caplog.text
+
+def test_system_prompt_has_few_shot_examples():
+    """SYSTEM_PROMPT содержит few-shot примеры для routing."""
+    assert "search_documents" in SYSTEM_PROMPT
+    assert "search_notes" in SYSTEM_PROMPT
+    assert "save_note" in SYSTEM_PROMPT
+    assert "final" in SYSTEM_PROMPT
+
+    # Минимум 5 примеров (символ → в примерах)
+    assert SYSTEM_PROMPT.count("→") >= 5
+
+    # Ключевые триггеры из провальных вопросов
+    assert "версия Python" in SYSTEM_PROMPT
+    assert "установка" in SYSTEM_PROMPT
+    assert "запуск" in SYSTEM_PROMPT
+    assert "лицензия" in SYSTEM_PROMPT
+    assert "статья" in SYSTEM_PROMPT
