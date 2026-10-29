@@ -165,11 +165,12 @@ def load_config(path: Path | None = None) -> AppConfig:
     )
 
     rag_raw = raw.get("rag", {})
+    rag_defaults = RAGConfig()
     rag = RAGConfig(
-        embedding_model=rag_raw.get("embedding_model", "paraphrase-multilingual-MiniLM-L12-v2"),
-        chunk_size=rag_raw.get("chunk_size", 800),
-        chunk_overlap=rag_raw.get("chunk_overlap", 100),
-        top_k=rag_raw.get("top_k", 5),
+        embedding_model=rag_raw.get("embedding_model", rag_defaults.embedding_model),
+        chunk_size=rag_raw.get("chunk_size", rag_defaults.chunk_size),
+        chunk_overlap=rag_raw.get("chunk_overlap", rag_defaults.chunk_overlap),
+        top_k=rag_raw.get("top_k", rag_defaults.top_k),
     )
 
     return AppConfig(llm=llm, paths=paths, safety=safety, rag=rag)

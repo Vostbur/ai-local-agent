@@ -56,10 +56,10 @@ class OllamaLLM:
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "tool_choice": "auto",
         }
         if tools_payload is not None:
             payload["tools"] = tools_payload
+            payload["tool_choice"] = "auto"
         if self.temperature is not None:
             payload["temperature"] = self.temperature
         if self.max_tokens is not None:

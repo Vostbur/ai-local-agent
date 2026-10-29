@@ -85,8 +85,7 @@ SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
         "properties": {
             "title": {
                 "type": "string",
-                "description": "Note title, used as filename. Example: 'Список покупок'. If the user did not give an explicit title, extract a short descriptive phrase (3-7 words) from their request.",
-            },
+                "description": "Note title, used as filename. Example: 'Список покупок'. If the user did not specify an explicit title, do NOT invent one — ask the user for clarification instead.",            },
             "content": {
                 "type": "string",
                 "description": "Note body in Markdown. If the user did not provide content, use an empty string.",

@@ -92,27 +92,35 @@ class TestOllamaLLMHTTPError:
 
 class TestOllamaLLMWithTools:
     def test_tools_in_payload(self):
-        """tools passed → payload has tools in correct format, tool_choice == 'auto'."""
-        payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+        """tools passed → payload has tools AND tool_choice == 'auto'."""
+        payload = {
+            "choices": [
+                {"message": {"role": "assistant", "content": "ok"}}
+            ]
+        }
 
         tool_def = ToolDefinition(
             name="search",
             description="Search the web",
-            parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+            parameters={
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+            },
             func=lambda query: "",
         )
 
-        with unittest.mock.patch("src.agent.llm_ollama.requests.post") as mock_post:
+        with unittest.mock.patch(
+            "src.agent.llm_ollama.requests.post"
+        ) as mock_post:
             mock_post.return_value = _make_mock_response(payload)
 
             llm = OllamaLLM(tools=[tool_def])
             llm.chat([{"role": "user", "content": "Search something"}])
 
-            # Check the call arguments
-            call_kwargs = mock_post.call_args
-            sent_payload = call_kwargs.kwargs["json"]
+            sent_payload = mock_post.call_args.kwargs["json"]
 
             assert "tools" in sent_payload
+            assert "tool_choice" in sent_payload
             assert sent_payload["tool_choice"] == "auto"
             assert sent_payload["tools"] == [
                 {
@@ -122,26 +130,55 @@ class TestOllamaLLMWithTools:
                         "description": "Search the web",
                         "parameters": {
                             "type": "object",
-                            "properties": {"query": {"type": "string"}},
+                            "properties": {
+                                "query": {"type": "string"}
+                            },
                         },
                     },
                 }
             ]
 
     def test_no_tools_in_payload(self):
-        """tools not passed → payload has no 'tools' key."""
-        payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+        """tools not passed → payload has NO 'tools' AND NO 'tool_choice'."""
+        payload = {
+            "choices": [
+                {"message": {"role": "assistant", "content": "ok"}}
+            ]
+        }
 
-        with unittest.mock.patch("src.agent.llm_ollama.requests.post") as mock_post:
+        with unittest.mock.patch(
+            "src.agent.llm_ollama.requests.post"
+        ) as mock_post:
             mock_post.return_value = _make_mock_response(payload)
 
-            llm = OllamaLLM()
+            llm = OllamaLLM()  # tools не передан
             llm.chat([{"role": "user", "content": "Hello"}])
 
-            call_kwargs = mock_post.call_args
-            sent_payload = call_kwargs.kwargs["json"]
+            sent_payload = mock_post.call_args.kwargs["json"]
 
             assert "tools" not in sent_payload
+            assert "tool_choice" not in sent_payload
+
+    def test_empty_tools_list_no_tool_choice(self):
+        """Явный пустой список tools → payload без 'tools' и без 'tool_choice'."""
+        payload = {
+            "choices": [
+                {"message": {"role": "assistant", "content": "ok"}}
+            ]
+        }
+
+        with unittest.mock.patch(
+            "src.agent.llm_ollama.requests.post"
+        ) as mock_post:
+            mock_post.return_value = _make_mock_response(payload)
+
+            llm = OllamaLLM(tools=[])
+            llm.chat([{"role": "user", "content": "Hello"}])
+
+            sent_payload = mock_post.call_args.kwargs["json"]
+
+            assert "tools" not in sent_payload
+            assert "tool_choice" not in sent_payload
 
 
 class TestOllamaLLMMalformedResponse:

@@ -249,8 +249,21 @@ model = "m"
         result = load_config(toml_file)
 
         assert result.rag == RAGConfig(
-            embedding_model="paraphrase-multilingual-MiniLM-L12-v2",
-            chunk_size=800,
+            embedding_model="paraphrase-multilingual-mpnet-base-v2",
+            chunk_size=400,
             chunk_overlap=100,
             top_k=5,
         )
+
+    def test_rag_defaults_match_dataclass(self, tmp_path: Path) -> None:
+        """load_config без секции [rag] берёт дефолты из RAGConfig."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text('[llm]\nmodel = "m"\n', encoding="utf-8")
+
+        result = load_config(toml_file)
+        defaults = RAGConfig()
+
+        assert result.rag.embedding_model == defaults.embedding_model
+        assert result.rag.chunk_size == defaults.chunk_size
+        assert result.rag.chunk_overlap == defaults.chunk_overlap
+        assert result.rag.top_k == defaults.top_k

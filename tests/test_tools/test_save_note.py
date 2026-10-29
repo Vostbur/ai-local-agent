@@ -83,6 +83,7 @@ def test_save_note_tool_description_has_russian_triggers() -> None:
     content_desc = SAVE_NOTE_TOOL.parameters["properties"]["content"]["description"]
     assert "empty string" in content_desc
 
+
 def test_reserved_windows_name_gets_prefix(tmp_path: Path) -> None:
     """Зарезервированные имена Windows получают префикс '_'."""
     for name in ("CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1", "lpt9"):
@@ -103,3 +104,11 @@ def test_no_trailing_dot_or_space(tmp_path: Path) -> None:
     assert not path.stem.endswith(".")
     assert not path.stem.endswith(" ")
     assert path.stem  # не пустой
+
+
+def test_title_description_does_not_suggest_inventing() -> None:
+    desc = SAVE_NOTE_TOOL.parameters["properties"]["title"]["description"]
+
+    assert "do NOT invent" in desc
+    assert "ask the user for clarification" in desc
+    assert "extract a short descriptive phrase" not in desc
