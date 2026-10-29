@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.rag.bm25 import BM25Index, _tokenize
+from src.agent.rag.bm25 import BM25Index, _stem, _tokenize
 from src.agent.rag.chunker import Chunk
 
 
@@ -90,8 +90,9 @@ class TestTokenize:
     """Функция _tokenize."""
 
     def test_tokenize_handles_cyrillic_and_latin(self) -> None:
+        # После стемминга: "привет" (6 символов) → "приве", "world" (5) и "123" (3) не трогаются
         result = _tokenize("Привет World 123!")
-        assert result == ["привет", "world", "123"]
+        assert result == ["приве", "world", "123"]
 
     def test_tokenize_strips_punctuation(self) -> None:
         result = _tokenize("a,b;c!d?")
@@ -137,3 +138,70 @@ class TestEmptyInputs:
         results = index.search("x")
 
         assert results == []
+
+
+class TestStem:
+    """Функция _stem: префикс 5 символов для длинных слов."""
+
+    def test_stem_long_word(self) -> None:
+        assert _stem("установить") == "устан"
+        assert _stem("установка") == "устан"
+
+    def test_stem_short_word_unchanged(self) -> None:
+        assert _stem("дом") == "дом"
+        assert _stem("гб") == "гб"
+        assert _stem("озу") == "озу"
+
+    def test_stem_boundary_length_5(self) -> None:
+        assert _stem("банка") == "банка"
+        assert _stem("банки") == "банки"
+
+    def test_stem_boundary_length_6(self) -> None:
+        assert _stem("банков") == "банко"
+
+    def test_tokenize_applies_stem(self) -> None:
+        assert _tokenize("установить установка") == ["устан", "устан"]
+
+    def test_tokenize_preserves_numbers(self) -> None:
+        # "16" и "гб" короткие — не трогаются; "памяти" (6) → "памят"
+        assert _tokenize("16 ГБ памяти") == ["16", "гб", "памят"]
+
+
+class TestStemImprovesMatching:
+    """Стемминг позволяет находить словоформы с общими корнями."""
+
+    def test_install_query_finds_installation_chunk(self) -> None:
+        chunks = [
+            _chunk(
+                "Как установить агента",
+                section="Установка с нуля",
+            ),
+            _chunk("другой раздел", section="Настройка"),
+        ]
+        index = BM25Index(chunks)
+        results = index.search("Как установить агента с нуля?", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0][0].section == "Установка с нуля"
+
+    def test_documents_query_finds_document_chunk(self) -> None:
+        chunks = [
+            _chunk("документ описывает архитектуру"),
+            _chunk("описание интерфейса"),
+        ]
+        index = BM25Index(chunks)
+        results = index.search("документы", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0][0].text == "документ описывает архитектуру"
+
+    def test_requirement_query_finds_requirement_chunk(self) -> None:
+        chunks = [
+            _chunk("Требования к системе"),
+            _chunk("Введение в проект"),
+        ]
+        index = BM25Index(chunks)
+        results = index.search("требовать", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0][0].text == "Требования к системе"
