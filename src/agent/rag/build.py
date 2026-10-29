@@ -90,7 +90,10 @@ def build_index(
     embedder = Embedder(config.rag.embedding_model)
     print("Загрузка модели эмбеддингов (первый раз — скачивание ~470 МБ)...")
 
-    texts = [c.text for c in all_chunks]
+    texts = [
+        f"{c.section}. {c.text}" if c.section else c.text
+        for c in all_chunks
+    ]
     start = time.time()
     vectors = embedder.embed(texts)
     elapsed = time.time() - start

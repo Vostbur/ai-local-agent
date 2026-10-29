@@ -45,8 +45,8 @@ class RAGConfig:
         top_k: Число ближайших векторов при поиске.
     """
 
-    embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
-    chunk_size: int = 800
+    embedding_model: str = "paraphrase-multilingual-mpnet-base-v2"
+    chunk_size: int = 400
     chunk_overlap: int = 100
     top_k: int = 5
 

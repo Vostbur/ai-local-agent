@@ -56,7 +56,7 @@ def search_documents(query: str, top_k: int = 5) -> list[dict]:
 
     store, embedder = _get_rag_service()
     query_vec = embedder.embed_one(query)
-    results = store.search(query_vec, top_k=top_k)
+    results = store.search_hybrid(query, query_vec, top_k=top_k)
 
     return [
         {

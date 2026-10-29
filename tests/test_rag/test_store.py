@@ -145,3 +145,80 @@ class TestSaveCreatesDirectory:
         assert (new_dir / "vectors.npy").exists()
         assert (new_dir / "chunks.json").exists()
         assert (new_dir / "meta.json").exists()
+
+
+class TestHybridSearch:
+    """Тесты гибридного поиска (BM25 + vector через RRF)."""
+
+    @pytest.fixture
+    def hybrid_store(self) -> VectorStore:
+        """VectorStore с 5 чанками и детерминированными векторами."""
+        chunks = [
+            Chunk(text="система с 16 ГБ памяти и быстрым процессором", path=Path("doc1.md"), section="Требования", chunk_index=0),
+            Chunk(text="базовая конфигурация с 3 ГБ памяти", path=Path("doc1.md"), section="Требования", chunk_index=1),
+            Chunk(text="архитектура приложения описывает модули", path=Path("doc2.md"), section="Архитектура", chunk_index=0),
+            Chunk(text="интерфейс пользователя включает формы", path=Path("doc2.md"), section="Интерфейс", chunk_index=1),
+            Chunk(text="быстрый процессор и высокая производительность", path=Path("doc3.md"), section="Производительность", chunk_index=0),
+        ]
+        # Детерминированные нормализованные векторы (5x3)
+        vectors = np.array([
+            [1.0, 0.0, 0.0],
+            [0.8, 0.2, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.2, 0.8, 0.0],
+            [0.5, 0.5, 0.0],
+        ], dtype=np.float32)
+        return VectorStore(vectors=vectors, chunks=chunks, meta={})
+
+    def test_hybrid_combines_vector_and_bm25(self, hybrid_store: VectorStore) -> None:
+        """BM25 находит по точному слову, векторный — по семантике; результат содержит оба."""
+        # query_vector близок к chunk[0] (1,0,0) и chunk[4] (0.5,0.5,0)
+        query_vec = np.array([1.0, 0.3, 0.0], dtype=np.float32)
+        # BM25 по "процессор" найдёт chunk[0] и chunk[4]
+        results = hybrid_store.search_hybrid("процессор", query_vec, top_k=5)
+
+        texts = {c.text for c, _ in results}
+        # chunk[0] и chunk[4] оба содержат "процессор" — BM25 их найдёт
+        assert "система с 16 ГБ памяти и быстрым процессором" in texts
+        assert "быстрый процессор и высокая производительность" in texts
+
+    def test_hybrid_rrf_score_decreasing(self, hybrid_store: VectorStore) -> None:
+        """RRF score убывает по списку."""
+        query_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        results = hybrid_store.search_hybrid("памяти", query_vec, top_k=5)
+
+        scores = [score for _, score in results]
+        for i in range(len(scores) - 1):
+            assert scores[i] >= scores[i + 1]
+
+    def test_hybrid_top_k_limits_results(self, hybrid_store: VectorStore) -> None:
+        """top_k=2 → 2 результата."""
+        query_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        results = hybrid_store.search_hybrid("памяти", query_vec, top_k=2)
+
+        assert len(results) == 2
+
+    def test_hybrid_empty_query_returns_empty(self, hybrid_store: VectorStore) -> None:
+        """Пустой query → [] (и BM25, и vector пусты)."""
+        query_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        results = hybrid_store.search_hybrid("", query_vec, top_k=5)
+
+        assert results == []
+
+    def test_hybrid_rrf_deduplicates(self, hybrid_store: VectorStore) -> None:
+        """Чанк, найденный обоими поисками, не дублируется, а получает сумму RRF."""
+        # query_vec близок к chunk[0], и BM25 по "система" тоже найдёт chunk[0]
+        query_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        results = hybrid_store.search_hybrid("система", query_vec, top_k=5)
+
+        # chunk[0] ("система с 16 ГБ памяти...") найден обоими — должен быть один раз
+        keys = [(c.text, c.chunk_index) for c, _ in results]
+        assert len(keys) == len(set(keys)), "Дубликаты чанков в результатах гибридного поиска"
+
+        # chunk[0] должен получить сумму RRF от обоих поисков, поэтому его score > 1/candidate_k
+        chunk0_result = next(r for r in results if r[0].text == "система с 16 ГБ памяти и быстрым процессором")
+        rrf_k = 60
+        candidate_k = 20
+        # минимальный возможный RRF от одного поиска: 1/(60+1) ≈ 0.016
+        # от двух: > 0.016
+        assert chunk0_result[1] > 1.0 / (rrf_k + 1)
