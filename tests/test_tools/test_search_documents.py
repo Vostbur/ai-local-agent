@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from src.agent.tools.search_documents import search_documents
+from src.agent.tools.search_documents import (
+    SEARCH_DOCUMENTS_TOOL,
+    _reset_rag_service,
+    search_documents,
+)
 from src.agent.rag.chunker import Chunk
 
 
@@ -91,3 +95,13 @@ class TestSearchDocumentsUsesHybrid:
         mock_store.search_hybrid.assert_called_once()
         call_args = mock_store.search_hybrid.call_args
         assert call_args[1]["top_k"] == 3  # keyword argument
+
+def test_description_mentions_documents_and_not_notes():
+    desc = SEARCH_DOCUMENTS_TOOL.description
+
+    assert "DOCUMENTS" in desc
+    assert "README" in desc
+    assert "NOT personal notes" in desc
+    assert "search_notes" in desc
+    assert "установка" in desc
+    assert "версия Python" in desc

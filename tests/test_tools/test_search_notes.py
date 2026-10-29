@@ -57,7 +57,8 @@ def test_query_in_title_not_in_body_not_found(tmp_path: Path) -> None:
 def test_tool_description_contains_keywords() -> None:
     description = SEARCH_NOTES_TOOL.description
     assert "snippet" in description
-    assert "use read_notes" in description
+    assert "search_documents" in description
+    assert "PERSONAL NOTES" in description
 
 
 def test_stem_match_finds_word_form(tmp_path: Path) -> None:
@@ -169,3 +170,12 @@ def test_search_notes_negative_max_results_returns_empty(tmp_path: Path) -> None
     result = search_notes("query", tmp_path, max_results=-1)
 
     assert result == []
+
+
+def test_description_limits_to_personal_notes():
+    desc = SEARCH_NOTES_TOOL.description
+
+    assert "PERSONAL NOTES" in desc
+    assert "NOT documents" in desc
+    assert "search_documents" in desc
+    assert "мои заметки" in desc
