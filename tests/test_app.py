@@ -8,6 +8,7 @@ from src.agent.config import (
     AppConfig,
     LLMConfig,
     PathsConfig,
+    RAGConfig,
     SafetyConfig,
     load_config,
 )
@@ -28,10 +29,13 @@ def _make_config() -> AppConfig:
             inbox_dir=Path("data/inbox"),
             photos_dir=Path("data/photos"),
             logs_dir=Path("logs"),
+            index_dir=Path("data/index"),
+            documents_dir=Path("data/documents"),
         ),
         safety=SafetyConfig(
             confirm_file_operations=True,
         ),
+        rag=RAGConfig(),
     )
 
 
@@ -74,6 +78,7 @@ def test_build_orchestrator_registers_all_tools():
     assert orch.registry.get("save_note") is not None
     assert orch.registry.get("read_notes") is not None
     assert orch.registry.get("search_notes") is not None
+    assert orch.registry.get("search_documents") is not None
 
 
 def test_tool_context_has_notes_dir_for_all_tools():
@@ -82,6 +87,13 @@ def test_tool_context_has_notes_dir_for_all_tools():
     assert orch.tool_context["save_note"]["notes_dir"] == config.paths.notes_dir
     assert orch.tool_context["read_notes"]["notes_dir"] == config.paths.notes_dir
     assert orch.tool_context["search_notes"]["notes_dir"] == config.paths.notes_dir
+
+
+def test_tool_context_not_set_for_search_documents():
+    """search_documents работает с index_dir, а не с notes_dir."""
+    config = _make_config()
+    orch = build_orchestrator(config, logging.getLogger("test"))
+    assert "search_documents" not in orch.tool_context
 
 
 def test_toml_reaches_orchestrator_and_llm(tmp_path: Path):

@@ -35,6 +35,23 @@ class LLMConfig:
 
 
 @dataclass
+class RAGConfig:
+    """Настройки RAG-поиска.
+
+    Атрибуты:
+        embedding_model: Имя модели эмбеддингов.
+        chunk_size: Размер чанка при разбиении документов.
+        chunk_overlap: Перекрытие между чанками.
+        top_k: Число ближайших векторов при поиске.
+    """
+
+    embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    chunk_size: int = 800
+    chunk_overlap: int = 100
+    top_k: int = 5
+
+
+@dataclass
 class PathsConfig:
     """Пути к ресурсам агента.
 
@@ -47,6 +64,7 @@ class PathsConfig:
         logs_dir: Путь к директории логов.
         memory: Путь к директории памяти.
         tools: Путь к директории инструментов.
+        index_dir: Директория векторного индекса RAG.
     """
 
     data_dir: Path = Path("data")
@@ -57,6 +75,7 @@ class PathsConfig:
     logs_dir: Path = Path("logs")
     memory: Path = Path("memory")
     tools: Path = Path("tools")
+    index_dir: Path = Path("data/index")
 
 
 @dataclass
@@ -82,11 +101,13 @@ class AppConfig:
         llm: Настройки LLM-модели.
         paths: Пути к ресурсам.
         safety: Настройки безопасности.
+        rag: Настройки RAG-поиска.
     """
 
     llm: LLMConfig
     paths: PathsConfig
     safety: SafetyConfig
+    rag: RAGConfig
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -134,6 +155,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         logs_dir=_resolve_path(paths_raw.get("logs_dir", "logs")),
         memory=_resolve_path(paths_raw.get("memory", "memory")),
         tools=_resolve_path(paths_raw.get("tools", "tools")),
+        index_dir=_resolve_path(paths_raw.get("index_dir", "data/index")),
     )
 
     safety_raw = raw.get("safety", {})
@@ -142,4 +164,12 @@ def load_config(path: Path | None = None) -> AppConfig:
         max_tool_retries=safety_raw.get("max_tool_retries", 2),
     )
 
-    return AppConfig(llm=llm, paths=paths, safety=safety)
+    rag_raw = raw.get("rag", {})
+    rag = RAGConfig(
+        embedding_model=rag_raw.get("embedding_model", "paraphrase-multilingual-MiniLM-L12-v2"),
+        chunk_size=rag_raw.get("chunk_size", 800),
+        chunk_overlap=rag_raw.get("chunk_overlap", 100),
+        top_k=rag_raw.get("top_k", 5),
+    )
+
+    return AppConfig(llm=llm, paths=paths, safety=safety, rag=rag)

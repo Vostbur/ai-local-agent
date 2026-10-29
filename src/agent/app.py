@@ -9,8 +9,14 @@ from src.agent.registry import ToolRegistry
 from src.agent.tools.save_note import SAVE_NOTE_TOOL
 from src.agent.tools.read_notes import READ_NOTES_TOOL
 from src.agent.tools.search_notes import SEARCH_NOTES_TOOL
+from src.agent.tools.search_documents import SEARCH_DOCUMENTS_TOOL
 
-ALL_TOOLS = [SAVE_NOTE_TOOL, READ_NOTES_TOOL, SEARCH_NOTES_TOOL]
+ALL_TOOLS = [
+    SAVE_NOTE_TOOL,
+    READ_NOTES_TOOL,
+    SEARCH_NOTES_TOOL,
+    SEARCH_DOCUMENTS_TOOL,
+]
 
 TOOLS_WITH_NOTES_DIR = ("save_note", "read_notes", "search_notes")
 

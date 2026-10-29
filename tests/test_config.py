@@ -9,6 +9,7 @@ from src.agent.config import (
     AppConfig,
     LLMConfig,
     PathsConfig,
+    RAGConfig,
     SafetyConfig,
     _PROJECT_ROOT,
     load_config,
@@ -207,3 +208,49 @@ model = "m"
         result = load_config(toml_file)
 
         assert result.paths.documents_dir == _PROJECT_ROOT / "data" / "documents"
+
+    def test_rag_section_from_toml(self, tmp_path: Path) -> None:
+        """Значения из [rag] TOML попадают в config.rag."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+
+[rag]
+embedding_model = "all-MiniLM-L6-v2"
+chunk_size = 512
+chunk_overlap = 50
+top_k = 10
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.rag == RAGConfig(
+            embedding_model="all-MiniLM-L6-v2",
+            chunk_size=512,
+            chunk_overlap=50,
+            top_k=10,
+        )
+
+    def test_rag_defaults(self, tmp_path: Path) -> None:
+        """Если в TOML нет [rag] — применяются значения по умолчанию."""
+        toml_file = tmp_path / "settings.toml"
+        toml_file.write_text(
+            """\
+[llm]
+model = "m"
+""",
+            encoding="utf-8",
+        )
+
+        result = load_config(toml_file)
+
+        assert result.rag == RAGConfig(
+            embedding_model="paraphrase-multilingual-MiniLM-L12-v2",
+            chunk_size=800,
+            chunk_overlap=100,
+            top_k=5,
+        )

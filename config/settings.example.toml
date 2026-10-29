@@ -16,6 +16,8 @@ inbox_dir = "data/inbox"
 photos_dir = "data/photos"
 # Корень корпуса документов для RAG. Относительный путь — от корня проекта.
 documents_dir = "data/documents"
+# Корень векторного индекса для RAG. Относительный путь — от корня проекта.
+index_dir = "data/index"
 
 logs_dir = "logs"
 
@@ -26,3 +28,14 @@ logs_dir = "logs"
 
 # Сколько раз оркестратор повторит падающий вызов инструмента, прежде чем сдаться.
 max_tool_retries = 2
+
+[rag]
+# Модель эмбеддингов. Мультиязычная (русский + английский).
+# Альтернативы: "intfloat/multilingual-e5-small"
+embedding_model = "paraphrase-multilingual-MiniLM-L12-v2"
+# Размер чанка в символах. ~200 токенов — хорошо для 3B с контекстом 8K.
+chunk_size = 800
+# Перекрытие соседних чанков, чтобы не рвать мысль на границе.
+chunk_overlap = 100
+# Сколько чанков возвращать в search_documents (пока не используется, для 7.2).
+top_k = 5
