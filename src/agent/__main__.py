@@ -68,7 +68,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     p_web = sub.add_parser("web", help="Запустить веб-интерфейс")
-    p_web.add_argument("--host", default="127.0.0.1", help="Хост (по умолчанию 127.0.0.1)")
+    p_web.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Хост (по умолчанию 0.0.0.0 — доступ по локальной сети)",
+    )
     p_web.add_argument("--port", type=int, default=8000, help="Порт (по умолчанию 8000)")
 
     return parser
@@ -134,6 +138,12 @@ def main(argv: list[str] | None = None) -> None:
 
         app = create_app(config, logger)
         print(f"AI Local Agent web: http://{args.host}:{args.port}")
+        if args.host == "0.0.0.0":
+            print()
+            print("WARNING: Web UI доступен по локальной сети БЕЗ аутентификации.")
+            print("         Любой, кто в вашей сети, может пользоваться агентом.")
+            print("         Не открывайте порт в интернет.")
+            print()
         uvicorn.run(app, host=args.host, port=args.port)
 
 

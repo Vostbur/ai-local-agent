@@ -211,14 +211,4 @@ def create_app(
                 "error": f"internal: {exc}",
             }
 
-    @app.post("/analyze-image")
-    def analyze_image() -> dict:
-        raise HTTPException(
-            status_code=501,
-            detail=(
-                "image analysis not yet implemented. "
-                "См. TASKS.md, шаг 8."
-            ),
-        )
-
     return app

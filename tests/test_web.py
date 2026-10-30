@@ -76,7 +76,6 @@ def test_index_page_returns_html(tmp_path):
     assert "Агент" in resp.text
     assert "Документы" in resp.text
     assert "Чат" in resp.text
-    assert "Фото" in resp.text
 
 
 def test_health(tmp_path):
@@ -84,13 +83,6 @@ def test_health(tmp_path):
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
-
-
-def test_analyze_image_returns_501(tmp_path):
-    client = _client(tmp_path)
-    resp = client.post("/analyze-image")
-    assert resp.status_code == 501
-    assert "image analysis not yet implemented" in resp.text
 
 
 def test_ask_returns_task_id(tmp_path):
