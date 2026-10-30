@@ -47,9 +47,11 @@ def test_reads_markdown_file(patched_root: Path) -> None:
     assert "Some content here" in result["text"]
     # Markdown-экстрактор убирает заголовок "# Template" в section;
     # в text остаётся только body.
-    assert "# Template" not in result["text"]
+    # Заголовок секции теперь в text как "## Template"
+    assert "## Template" in result["text"]
+    assert "Some content here." in result["text"]
     assert result["truncated"] is False
-    assert result["total_chars"] == len("Some content here.")
+    assert result["total_chars"] == len(result["text"])
 
 
 def test_reads_txt_file(patched_root: Path) -> None:
@@ -143,3 +145,21 @@ def test_missing_file_raises(patched_root: Path) -> None:
 
     with pytest.raises(ValueError, match="cannot read"):
         read_document(str(missing))
+
+
+def test_includes_section_headers(patched_root: Path) -> None:
+    """read_document включает ## section в текст, иначе шаблон теряет структуру."""
+    path = patched_root / "template.md"
+    path.write_text(
+        "# Title\n\n"
+        "## 1. Введение\n\nIntro text.\n\n"
+        "## 2. Результаты\n\nResults text.\n",
+        encoding="utf-8",
+    )
+
+    result = read_document(str(path))
+
+    assert "## 1. Введение" in result["text"]
+    assert "## 2. Результаты" in result["text"]
+    assert "Intro text." in result["text"]
+    assert "Results text." in result["text"]

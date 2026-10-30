@@ -49,7 +49,15 @@ def read_document(path: str, max_chars: int = 4000) -> dict:
     if doc is None:
         raise ValueError(f"cannot read {resolved}: extraction failed")
 
-    text = "\n\n".join(seg.text for seg in doc.segments)
+    parts: list[str] = []
+    for seg in doc.segments:
+        if not seg.text.strip():
+            continue
+        if seg.section:
+            parts.append(f"## {seg.section}")
+        parts.append(seg.text)
+    text = "\n\n".join(parts)
+
     total = len(text)
     truncated = total > max_chars
     if truncated:
@@ -60,7 +68,7 @@ def read_document(path: str, max_chars: int = 4000) -> dict:
         "text": text,
         "truncated": truncated,
         "total_chars": total,
-        "suffix": resolved.suffix.lower(),
+        "suffix": suffix,
     }
 
 
