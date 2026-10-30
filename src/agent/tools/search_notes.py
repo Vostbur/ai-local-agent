@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
+from src.agent.stem import stem
 from src.agent.tools._search import find_match_with_kind, iter_md_files, load_note
 
 
@@ -51,8 +52,10 @@ def search_notes(
         if kind == "exact":
             matches = body.lower().count(query.lower())
         else:  # kind == "stem"
-            stem = query[:-2].lower()
-            matches = len(re.findall(rf"\b{re.escape(stem)}", body.lower()))
+            stemmed = stem(query.lower())
+            matches = len(
+                re.findall(rf"\b{re.escape(stemmed)}", body.lower())
+            )
 
         line_start = body.rfind("\n", 0, start) + 1
         line_end = body.find("\n", start)
@@ -125,4 +128,5 @@ SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
         "required": ["query"],
     },
     func=search_notes,
+    needs_notes_dir=True,
 )

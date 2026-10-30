@@ -89,4 +89,5 @@ READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
         "required": [],
     },
     func=read_notes,
+    needs_notes_dir=True,
 )

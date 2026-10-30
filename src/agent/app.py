@@ -22,9 +22,6 @@ ALL_TOOLS = [
     WRITE_DOCUMENT_TOOL,
 ]
 
-TOOLS_WITH_NOTES_DIR = ("save_note", "read_notes", "search_notes")
-TOOLS_WITH_OUTPUT_DIR = ("write_document",)
-
 
 def build_orchestrator(
     config: AppConfig, logger: logging.Logger | None = None
@@ -44,10 +41,14 @@ def build_orchestrator(
     )
 
     tool_context: dict[str, dict] = {}
-    for name in TOOLS_WITH_NOTES_DIR:
-        tool_context[name] = {"notes_dir": config.paths.notes_dir}
-    for name in TOOLS_WITH_OUTPUT_DIR:
-        tool_context[name] = {"output_dir": config.paths.generated_dir}
+    for tool in ALL_TOOLS:
+        ctx: dict = {}
+        if tool.needs_notes_dir:
+            ctx["notes_dir"] = config.paths.notes_dir
+        if tool.needs_output_dir:
+            ctx["output_dir"] = config.paths.generated_dir
+        if ctx:
+            tool_context[tool.name] = ctx
 
     return Orchestrator(
         llm=llm,

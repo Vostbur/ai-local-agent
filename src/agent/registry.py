@@ -16,12 +16,18 @@ class ToolDefinition:
         description: Описание назначения инструмента.
         parameters: Схема параметров (JSON Schema-подобная структура).
         func: Вызываемый объект, реализующий инструмент.
+        needs_notes_dir: Если True, оркестратор добавит ``notes_dir``
+            из ``config.paths.notes_dir`` в аргументы инструмента.
+        needs_output_dir: Если True, оркестратор добавит ``output_dir``
+            из ``config.paths.generated_dir`` в аргументы инструмента.
     """
 
     name: str
     description: str
     parameters: dict[str, Any]
     func: Callable[..., Any]
+    needs_notes_dir: bool = False
+    needs_output_dir: bool = False
 
 
 class ToolRegistry:

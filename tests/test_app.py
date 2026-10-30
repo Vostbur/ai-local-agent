@@ -129,3 +129,27 @@ def test_tool_context_has_output_dir_for_write_document():
     orch = build_orchestrator(config, logging.getLogger("test"))
     assert orch.tool_context["write_document"]["output_dir"] == config.paths.generated_dir
     assert "read_document" not in orch.tool_context
+
+
+def test_tool_definition_context_flags():
+    """Флаги контекста объявлены на самих инструментах (T30)."""
+    from src.agent.tools.save_note import SAVE_NOTE_TOOL
+    from src.agent.tools.read_notes import READ_NOTES_TOOL
+    from src.agent.tools.search_notes import SEARCH_NOTES_TOOL
+    from src.agent.tools.search_documents import SEARCH_DOCUMENTS_TOOL
+    from src.agent.tools.read_document import READ_DOCUMENT_TOOL
+    from src.agent.tools.write_document import WRITE_DOCUMENT_TOOL
+
+    # Три инструмента заметок получают notes_dir
+    assert SAVE_NOTE_TOOL.needs_notes_dir is True
+    assert READ_NOTES_TOOL.needs_notes_dir is True
+    assert SEARCH_NOTES_TOOL.needs_notes_dir is True
+
+    # write_document получает output_dir
+    assert WRITE_DOCUMENT_TOOL.needs_output_dir is True
+
+    # read_document и search_documents — без tool_context
+    assert READ_DOCUMENT_TOOL.needs_notes_dir is False
+    assert READ_DOCUMENT_TOOL.needs_output_dir is False
+    assert SEARCH_DOCUMENTS_TOOL.needs_notes_dir is False
+    assert SEARCH_DOCUMENTS_TOOL.needs_output_dir is False

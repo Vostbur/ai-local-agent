@@ -57,4 +57,5 @@ WRITE_DOCUMENT_TOOL: ToolDefinition = ToolDefinition(
         "required": ["title", "content"],
     },
     func=write_document,
+    needs_output_dir=True,
 )

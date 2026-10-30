@@ -114,4 +114,5 @@ SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
         "required": ["title", "content"],
     },
     func=save_note,
+    needs_notes_dir=True,
 )
