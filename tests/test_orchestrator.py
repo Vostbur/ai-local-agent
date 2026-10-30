@@ -653,7 +653,7 @@ def test_system_prompt_does_not_contain_real_note_paths() -> None:
     """
     assert "тесты/тест_b1.md" not in SYSTEM_PROMPT
 
-    
+
 def test_system_prompt_no_call_syntax_for_crud_tools() -> None:
     """Урок 7.3: синтаксиса вызова новых инструментов в промпте быть не должно."""
     for snippet in (
@@ -725,3 +725,14 @@ def test_error_tool_result_message_encourages_retry() -> None:
     assert "ERROR" in error_message
     assert "try again" in error_message
     assert "final answer now" not in error_message
+
+def test_system_prompt_has_notes_tool_routing_rule() -> None:
+    """Правило выбора между read_notes / search_notes / list_notes.
+
+    Страховка от прогона 2026-10-30: на «найди заметку с заголовком»
+    модель вызвала search_notes (поиск по телу) и вернула ложный ноль.
+    Проверка на точные фразы — по уроку про documentation rot.
+    """
+    assert "Выбор инструмента для заметок" in SYSTEM_PROMPT
+    assert "ЗАГОЛОВОК" in SYSTEM_PROMPT
+    assert "СОДЕРЖИМОЕ" in SYSTEM_PROMPT
