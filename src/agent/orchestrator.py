@@ -21,7 +21,12 @@ SYSTEM_PROMPT = (
     "- search_documents — поиск в документах пользователя (README, статьи, файлы проекта).\n"
     "- search_notes — поиск в ЛИЧНЫХ заметках пользователя (data/notes/).\n"
     "- read_notes — список заметок по названию.\n"
-    "- save_note — сохранить заметку.\n\n"
+    "- list_notes — список заметок: все или по категории.\n"
+    "- save_note — сохранить заметку (опционально в категорию).\n"
+    "- update_note — изменить заголовок и/или текст существующей заметки.\n"
+    "- delete_note — удалить заметку (перемещает в корзину, не стирает безвозвратно).\n"
+    "- move_note — переместить заметку в другую категорию или в корень.\n"
+    "- list_categories — список категорий заметок и число заметок в каждой.\n\n"
     "ВАЖНО: почти любой вопрос про проект, агент, README, установку, "
     "требования, возможности, статьи, код, лицензию — это вопрос про документы. "
     "ВСЕГДА используй search_documents, даже если вопрос выглядит как общий "
@@ -43,6 +48,13 @@ SYSTEM_PROMPT = (
     "Инструменты работы с документами:\n"
     "- read_document(path) — прочитать шаблон или документ целиком (или первые N символов).\n"
     "- write_document(title, content) — создать новый Markdown-документ.\n\n"
+    "Изменение заметок (ОБЯЗАТЕЛЬНО):\n"
+    "update_note, delete_note и move_note принимают аргумент 'path' — ПУТЬ к файлу "
+    "заметки относительно data/notes/ (например, 'тесты/тест_b1.md'), "
+    "а НЕ название заметки. Если пользователь назвал заметку по названию и у тебя "
+    "ещё нет её пути из результата предыдущего инструмента — сначала вызови "
+    "list_notes или read_notes, чтобы найти путь, и только потом вызывай "
+    "update_note, delete_note или move_note.\n\n"
     "Правило для генерации документа по шаблону (ОБЯЗАТЕЛЬНО):\n"
     "1. Вызови read_document(path=...) — увидишь структуру шаблона.\n"
     "2. Сразу после этого ВЫЗОВИ инструмент write_document через tool_call. "
@@ -257,6 +269,12 @@ class Orchestrator:
                     content = (
                         f"tool_result: SKIPPED. {response.tool_name} {result}. "
                         f"Respond with a final answer now."
+                    )
+                elif tool_status == "ERROR":
+                    content = (
+                        f"tool_result: ERROR. {response.tool_name} failed: {result} "
+                        f"Read the error message carefully: it explains what is wrong. "
+                        f"Fix the arguments or use another tool, then try again."
                     )
                 else:
                     content = (

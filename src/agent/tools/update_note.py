@@ -83,8 +83,10 @@ UPDATE_NOTE_TOOL: ToolDefinition = ToolDefinition(
             "path": {
                 "type": "string",
                 "description": (
-                    "Path to the note relative to data/notes/, e.g. 'работа/вторая.md'. "
-                    "Take it from list_notes/read_notes/search_notes results."
+                    "FILE PATH of the note relative to data/notes/, e.g. "
+                    "'работа/вторая.md'. This is NOT the note title — do NOT "
+                    "pass the title here. Take the path from list_notes/"
+                    "read_notes/search_notes results."
                 ),
             },
             "title": {

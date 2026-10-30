@@ -242,3 +242,25 @@ class TestErrorMessageGuidesToSearch:
         msg = str(exc.value)
         assert "list_notes" in msg
         assert "read_notes" in msg
+
+
+class TestToolDescriptionsWarnAboutPath:
+    """Описание параметра path должно явно запрещать передавать заголовок."""
+
+    def test_update_note_path_description(self) -> None:
+        from src.agent.tools.update_note import UPDATE_NOTE_TOOL
+
+        desc = UPDATE_NOTE_TOOL.parameters["properties"]["path"]["description"]
+        assert "NOT the note title" in desc
+
+    def test_move_note_path_description(self) -> None:
+        from src.agent.tools.move_note import MOVE_NOTE_TOOL
+
+        desc = MOVE_NOTE_TOOL.parameters["properties"]["path"]["description"]
+        assert "NOT the note title" in desc
+
+    def test_delete_note_path_description(self) -> None:
+        from src.agent.tools.delete_note import DELETE_NOTE_TOOL
+
+        desc = DELETE_NOTE_TOOL.parameters["properties"]["path"]["description"]
+        assert "NOT the note title" in desc

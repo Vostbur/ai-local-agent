@@ -621,3 +621,98 @@ def test_on_step_called_for_final():
     final_events = [e for e in events if e.event_type == "final"]
     assert len(final_events) == 1
     assert final_events[0].status == "ok"
+
+def test_system_prompt_lists_crud_tools() -> None:
+    """SYSTEM_PROMPT перечисляет CRUD-инструменты заметок (этап B)."""
+    for tool in (
+        "list_notes",
+        "update_note",
+        "delete_note",
+        "move_note",
+        "list_categories",
+    ):
+        assert tool in SYSTEM_PROMPT, f"{tool} отсутствует в SYSTEM_PROMPT"
+
+
+def test_system_prompt_requires_path_lookup_before_crud() -> None:
+    """Правило: для update/delete/move_note нужен путь, а не заголовок.
+
+    Страховка от сценария smoke 2026-10-30: модель передавала заголовок
+    'Тест B1' вместо пути и сдавалась после ошибки. Проверка на точную
+    фразу — по уроку про documentation rot.
+    """
+    assert "а НЕ название заметки" in SYSTEM_PROMPT
+    assert "сначала вызови" in SYSTEM_PROMPT
+
+
+def test_system_prompt_no_call_syntax_for_crud_tools() -> None:
+    """Урок 7.3: синтаксиса вызова новых инструментов в промпте быть не должно."""
+    for snippet in (
+        "list_notes(",
+        "update_note(",
+        "delete_note(",
+        "move_note(",
+        "list_categories(",
+    ):
+        assert snippet not in SYSTEM_PROMPT
+
+
+class _StubResponse:
+    def __init__(self, type_, content=None, tool_name=None, tool_arguments=None):
+        self.type = type_
+        self.content = content
+        self.tool_name = tool_name
+        self.tool_arguments = tool_arguments
+
+
+class _StubLLM:
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls: list[list[dict]] = []
+
+    def chat(self, messages):
+        self.calls.append([dict(m) for m in messages])
+        return self._responses.pop(0)
+
+
+def test_error_tool_result_message_encourages_retry() -> None:
+    """После ошибки инструмента модель получает призыв исправиться,
+    а не предложение завершить задачу (итог smoke 2026-10-30)."""
+
+    def _boom(**kwargs):
+        raise FileNotFoundError("note not found")
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="update_note",
+            description="d",
+            parameters={"type": "object", "properties": {}},
+            func=_boom,
+        )
+    )
+    llm = _StubLLM(
+        [
+            _StubResponse(
+                "tool_call",
+                tool_name="update_note",
+                tool_arguments={"path": "Тест B1", "title": "X"},
+            ),
+            _StubResponse("final", content="готово"),
+        ]
+    )
+
+    orchestrator = Orchestrator(
+        llm=llm,
+        registry=registry,
+        logger=logging.getLogger("test"),
+        max_steps=5,
+    )
+    result = orchestrator.run("измени заметку")
+
+    assert result.success is True
+    # Второй вызов chat: messages = [system, user, assistant, tool_result]
+    error_message = llm.calls[1][3]["content"]
+    assert "ERROR" in error_message
+    assert "try again" in error_message
+    assert "final answer now" not in error_message

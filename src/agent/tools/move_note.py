@@ -68,7 +68,11 @@ MOVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the note relative to data/notes/.",
+                "description": (
+                    "FILE PATH of the note relative to data/notes/, e.g. "
+                    "'работа/вторая.md'. This is NOT the note title — do NOT "
+                    "pass the title here."
+                ),
             },
             "category": {
                 "type": "string",
