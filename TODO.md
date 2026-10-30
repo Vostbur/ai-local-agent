@@ -160,6 +160,11 @@ T26 (замена `extract a short descriptive phrase` на `do NOT invent`) б�
 
 **Правило:** тесты на «неизвестный X» используют `.xyz`, `.bin`, `.nonexistent` — расширения, которых **никогда** не будет в реестре. Не `.pdf`, `.docx`, `.html` — они «пока неизвестны», но станут известны.
 
+### Урок: `import pymupdf`, не `import fitz`
+`fitz` — старое имя PyMuPDF, deprecated с 1.24. Cline при создании `pdf.py` использовал `import fitz` (старый API), тесты — `import pymupdf`. Результат: `FutureWarning` в проде, невидимый в pytest (маскировался `filterwarnings`).
+
+**Правило:** при генерации кода через Cline проверять импорты библиотек, которые недавно переименовывались (`fitz` → `pymupdf`, `sklearn` → `scikit-learn` в некоторых контекстах). Тесты — `import pymupdf`, прод — `import fitz` — классический рассинхрон. Один `Select-String "import fitz"` по `src/` находит за секунды.
+
 ---
 
 ## 📌 Roadmap: единый интерфейс пользователя
