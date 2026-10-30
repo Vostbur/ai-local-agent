@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import ensure_note_file, load_note, resolve_note_path
+from src.agent.tools._search import load_note, resolve_note_file
 
 
 def update_note(
@@ -38,8 +38,7 @@ def update_note(
     if title is not None and not title.strip():
         raise ValueError("title must not be empty")
 
-    candidate = resolve_note_path(path, notes_dir)
-    ensure_note_file(candidate, path)
+    candidate = resolve_note_file(path, notes_dir)
     if candidate.suffix != ".md":
         raise ValueError(f"Not a Markdown note: {path!r}")
 
@@ -84,9 +83,11 @@ UPDATE_NOTE_TOOL: ToolDefinition = ToolDefinition(
                 "type": "string",
                 "description": (
                     "FILE PATH of the note relative to data/notes/, e.g. "
-                    "'работа/вторая.md'. This is NOT the note title — do NOT "
-                    "pass the title here. Take the path from list_notes/"
-                    "read_notes/search_notes results."
+                    "'работа/вторая.md'. This is NOT the note title — prefer "
+                    "the exact path from list_notes/read_notes/search_notes "
+                    "results. Fallback: if you don't know the path, pass the "
+                    "note title and the tool will try to resolve the note "
+                    "by title."
                 ),
             },
             "title": {

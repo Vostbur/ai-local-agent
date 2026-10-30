@@ -264,3 +264,67 @@ class TestToolDescriptionsWarnAboutPath:
 
         desc = DELETE_NOTE_TOOL.parameters["properties"]["path"]["description"]
         assert "NOT the note title" in desc
+
+
+class TestTitleFallback:
+    """План Б: инструменты принимают заголовок вместо пути.
+
+    Страховка от устойчивого поведения 7B (три прогона 2026-10-30):
+    модель передаёт заголовок вместо пути и не восстанавливается
+    после направляющей ошибки.
+    """
+
+    def test_update_by_title(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        result = update_note("Первая", notes_dir, content="новое")
+        assert result["path"] == "первая.md"
+        assert (notes_dir / "первая.md").read_text(encoding="utf-8").count("новое") == 1
+
+    def test_update_by_category_and_title(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        result = update_note("работа/Вторая", notes_dir, content="x")
+        assert result["path"] == "работа/вторая.md"
+
+    def test_update_by_title_with_md_suffix(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        result = update_note("тесты/Третья".replace("тесты", "работа"), notes_dir, content="x")
+        assert result["path"] == "работа/третья.md"
+
+    def test_move_by_title(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        result = move_note("Первая", "архив", notes_dir)
+        assert result["path"] == "архив/первая.md"
+        assert (notes_dir / "архив" / "первая.md").exists()
+
+    def test_delete_by_title(self, notes_dir: Path, trash_dir: Path) -> None:
+        _seed(notes_dir)
+        result = delete_note("Первая", notes_dir, trash_dir)
+        assert not (notes_dir / "первая.md").exists()
+        assert Path(result["moved_to"]).exists()
+
+    def test_ambiguous_title_lists_candidates(
+        self, notes_dir: Path, trash_dir: Path
+    ) -> None:
+        save_note("Дубль", "один", notes_dir)
+        save_note("Дубль", "два", notes_dir)  # файл дубль_1.md, заголовок тот же
+        with pytest.raises(FileNotFoundError) as exc:
+            delete_note("Дубль", notes_dir, trash_dir)
+        msg = str(exc.value)
+        assert "дубль.md" in msg
+        assert "дубль_1.md" in msg
+        # Оба файла на месте — ничего не удалено.
+        assert (notes_dir / "дубль.md").exists()
+        assert (notes_dir / "дубль_1.md").exists()
+
+    def test_no_match_raises_guiding_error(
+        self, notes_dir: Path, trash_dir: Path
+    ) -> None:
+        with pytest.raises(FileNotFoundError) as exc:
+            delete_note("Не существует", notes_dir, trash_dir)
+        assert "list_notes" in str(exc.value)
+
+    def test_exact_path_still_preferred_over_title(self, notes_dir: Path) -> None:
+        """Если файл по пути существует — фолбэк не срабатывает."""
+        _seed(notes_dir)
+        result = update_note("работа/вторая.md", notes_dir, content="x")
+        assert result["path"] == "работа/вторая.md"

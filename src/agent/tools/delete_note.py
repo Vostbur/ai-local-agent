@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import ensure_note_file, resolve_note_path
+from src.agent.tools._search import resolve_note_file
 
 
 def delete_note(path: str, notes_dir: Path, trash_dir: Path) -> dict:
@@ -28,8 +28,7 @@ def delete_note(path: str, notes_dir: Path, trash_dir: Path) -> dict:
         ValueError: Если путь вне notes_dir.
         FileNotFoundError: Если заметка не найдена.
     """
-    candidate = resolve_note_path(path, notes_dir)
-    ensure_note_file(candidate, path)
+    candidate = resolve_note_file(path, notes_dir)
 
     rel = candidate.relative_to(notes_dir)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,8 +63,11 @@ DELETE_NOTE_TOOL: ToolDefinition = ToolDefinition(
                 "type": "string",
                 "description": (
                     "FILE PATH of the note relative to data/notes/, e.g. "
-                    "'работа/вторая.md'. This is NOT the note title — do NOT "
-                    "pass the title here."
+                    "'работа/вторая.md'. This is NOT the note title — prefer "
+                    "the exact path from list_notes/read_notes/search_notes "
+                    "results. Fallback: if you don't know the path, pass the "
+                    "note title and the tool will try to resolve the note "
+                    "by title."
                 ),
             },
         },

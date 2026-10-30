@@ -213,3 +213,71 @@ def ensure_note_file(candidate: Path, path_repr: str) -> None:
             f"NOT the note title. If you only know the title, call list_notes "
             f"or read_notes first to get the path, then retry."
         )
+
+def find_notes_by_title(title: str, notes_dir: Path) -> list[Path]:
+    """Заметки, чей заголовок (первая строка ``# ...``) совпадает с ``title``.
+
+    Сравнение без учёта регистра. Ищет рекурсивно по всем категориям.
+    """
+    target = title.strip().lower()
+    if not target:
+        return []
+
+    matches: list[Path] = []
+    for path in iter_md_files(notes_dir):
+        note = load_note(path)
+        if note is not None and note["title"].strip().lower() == target:
+            matches.append(path)
+    return matches
+
+def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
+    """Резолвит заметку по пути с фолбэком на поиск по заголовку.
+
+    Защита от устойчивого поведения 7B (три прогона 2026-10-30):
+    модель передаёт заголовок заметки вместо пути и не восстанавливается
+    после ошибки через list_notes.
+
+    Порядок:
+    1. Файл существует по пути — вернуть его.
+    2. Иначе поиск по заголовку (вся строка), затем по базовому имени
+       последней компоненты пути (без ``.md``). Ровно одно совпадение —
+       вернуть его.
+    3. Несколько совпадений — ``FileNotFoundError`` со списком
+       кандидатов: модель должна передать точный путь одного из них.
+    4. Нет совпадений — направляющая ``FileNotFoundError``.
+
+    Raises:
+        ValueError: Если путь выходит за пределы ``notes_dir``.
+        FileNotFoundError: Если заметка не найдена или неоднозначна.
+    """
+    candidate = resolve_note_path(path_repr, notes_dir)
+    if candidate.is_file():
+        return candidate
+
+    queries = [path_repr]
+    base = Path(path_repr).name
+    if base.endswith(".md"):
+        base = base[:-3]
+    if base and base != path_repr:
+        queries.append(base)
+
+    for query in queries:
+        matches = find_notes_by_title(query, notes_dir)
+        if len(matches) == 1:
+            logger.info(
+                "resolved note by title: %r -> %s",
+                path_repr,
+                matches[0].relative_to(notes_dir).as_posix(),
+            )
+            return matches[0]
+        if len(matches) > 1:
+            options = ", ".join(
+                m.relative_to(notes_dir).as_posix() for m in matches
+            )
+            raise FileNotFoundError(
+                f"Found {len(matches)} notes with title {query!r}: {options}. "
+                f"Pass the exact 'path' of one of them."
+            )
+
+    ensure_note_file(candidate, path_repr)
+    return candidate  # недостижимо: ensure_note_file бросает исключение
