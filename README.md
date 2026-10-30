@@ -6,22 +6,25 @@
 
 - **Сохранять заметки** в Markdown-файлы (`save_note`). Существующие заметки никогда не перезаписываются: при совпадении имени добавляется числовой суффикс.
 - **Искать заметки по названию** (`read_notes`) — по заголовку и имени файла, с учётом русских словоформ.
-- **Искать заметки по содержимому** (`search_notes`) — с фрагментом контекста и числом совпадений.
-- **Искать по документам** (`search_documents`) — семантический поиск по Markdown и TXT-файлам в `data/documents/`. Гибридный поиск: BM25 (лексический) + векторный (эмбеддинги) через RRF. Находит по смыслу, а не только по точному слову.
+- **Искать по содержимому заметок** (`search_notes`) — с фрагментом контекста и числом совпадений.
+- **Искать по документам** (`search_documents`) — семантический поиск по Markdown, TXT и PDF в `data/documents/`. Гибридный поиск: BM25 (лексический) + векторный (эмбеддинги) через RRF. Находит по смыслу, а не только по точному слову.
+- **Читать документ целиком** (`read_document`) — Markdown, TXT, PDF, с обрезкой до `max_chars`.
+- **Создавать документ по шаблону** (`write_document`) — прочитать шаблон через `read_document`, сгенерировать новый по структуре, сохранить в `data/generated/`.
+- **Чат с моделью без инструментов** (`python -m src.agent ask "вопрос"`) — прямое обращение к LLM, как `ollama run`, без SYSTEM_PROMPT и без tools.
 - Работать с **локальной моделью** через [Ollama](https://ollama.com) — по умолчанию 7B, 3B как опция для скорости.
 - **Не вызывать инструменты зря**: на посторонние вопросы вроде «какая погода» агент отвечает без `tool_call`.
-- **Не зацикливаться** на повторных вызовах: одинаковый вызов инструмента с теми же аргументами пропускается (шаг 6.1). После `max_tool_failures` неудач подряд падающий вызов блокируется.
-- **Не зависеть от текущей папки**: конфиг и данные берутся от корня проекта, а не от CWD (шаг 6.7).
-- **Переживать `null`** в опциональных аргументах от модели (шаг 6.7, T24).
-- Вести **логи** своих действий в `logs/agent.log` — без полных текстов заметок и содержимого документов.
+- **Не зацикливаться** на повторных вызовах: одинаковый вызов инструмента с теми же аргументами пропускается. После `max_tool_failures` неудач подряд падающий вызов блокируется.
+- **Не зависеть от текущей папки**: конфиг и данные берутся от корня проекта, а не от CWD.
+- **Переживать `null`** в опциональных аргументах от модели.
+- Вести **логи** своих действий в `logs/agent.log` — без полных текстов заметок и документов.
 
 ## Что появится позже
 
-- Анализ PDF-документов и создание новых документов по их подобию.
-- Сортировка фотографий по содержимому.
-- Расширение форматов RAG: PDF, DOCX, HTML, EPUB (сейчас — Markdown и TXT).
+- Сортировка фотографий по содержимому (`analyze_image`, `move_file`) — шаг 8.
+- Веб-интерфейс (FastAPI + SSE) — U5.
+- Расширение RAG: DOCX, HTML, EPUB (сейчас — Markdown, TXT, PDF).
 
-Текущий статус и план — в файле `TASKS.md`.
+Текущий статус и план — в `TASKS.md`. Roadmap UI — в `TODO.md`.
 
 ---
 
@@ -51,12 +54,16 @@
 
 По умолчанию `settings.example.toml` использует 7B. Чтобы переключиться на 3B:
 
-    ollama create qwen2.5-3b-agent -f Modelfile
+```
+ollama create qwen2.5-3b-agent -f Modelfile
+```
 
 И в `config/settings.toml`:
 
-    [llm]
-    model = "qwen2.5-3b-agent"
+```
+[llm]
+model = "qwen2.5-3b-agent"
+```
 
 ---
 
@@ -68,8 +75,10 @@
 
 Если вы уже скопировали папку проекта — переходите к шагу 2. Иначе:
 
-    git clone <адрес-вашего-репозитория> ai-local-agent
-    cd ai-local-agent
+```
+git clone <адрес-вашего-репозитория> ai-local-agent
+cd ai-local-agent
+```
 
 Если git не установлен, скачайте архив с проектом и распакуйте его, затем откройте терминал в распакованной папке.
 
@@ -79,19 +88,25 @@
 
 Убедитесь, что Ollama работает:
 
-    ollama --version
+```
+ollama --version
+```
 
 Если команда не найдена — перезапустите терминал.
 
 Загрузите модель:
 
-    ollama pull qwen2.5:7b
+```
+ollama pull qwen2.5:7b
+```
 
 Займёт несколько минут и около 5 ГБ.
 
 Проверьте:
 
-    ollama run qwen2.5:7b "Привет"
+```
+ollama run qwen2.5:7b "Привет"
+```
 
 Выйти из интерактивного режима — Ctrl+D (macOS/Linux) или `/bye` (Windows).
 
@@ -99,122 +114,212 @@
 
 В корне проекта уже есть `Modelfile.7b` (для 7B) и `Modelfile` (для 3B). Соберите модель под новым именем:
 
-    ollama create qwen2.5-7b-agent -f Modelfile.7b
+```
+ollama create qwen2.5-7b-agent -f Modelfile.7b
+```
 
 Проверьте:
 
-    ollama list
+```
+ollama list
+```
 
 В списке должна появиться `qwen2.5-7b-agent:latest` (тег `:latest` Ollama добавляет автоматически).
 
 ### Шаг 4. Создайте виртуальное окружение Python
 
-    python -m venv .venv
+```
+python -m venv .venv
+```
 
 Активируйте:
 
 **Windows (PowerShell):**
 
-    .venv\Scripts\Activate.ps1
+```
+.venv\Scripts\Activate.ps1
+```
 
 Если PowerShell ругается на политику выполнения, один раз выполните:
 
-    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
 
 **Windows (cmd):**
 
-    .venv\Scripts\activate.bat
+```
+.venv\Scripts\activate.bat
+```
 
 **macOS / Linux:**
 
-    source .venv/bin/activate
+```
+source .venv/bin/activate
+```
 
 В начале строки появится `(.venv)`.
 
-### Шаг 5. Установите зависимости
+### Шаг 5. Установите проект в режиме разработки
 
-    pip install -r requirements.txt
+```
+pip install -e .
+```
 
-Первый запуск скачает модель эмбеддингов `paraphrase-multilingual-mpnet-base-v2` (~1.1 ГБ) — только когда вы соберёте RAG-индекс (шаг 7b). Если RAG не нужен, этот шаг можно пропустить.
+Это установит зависимости (`requests`, `pymupdf`, `sentence-transformers`, `numpy`) и зарегистрирует пакет `agent` — после этого работают обе формы:
+
+```
+python -m src.agent --help
+python -m agent --help
+```
+
+Вторая короче, рекомендуется. Первая работает без `pip install -e .`, если запускать из корня проекта.
+
+Первый запуск `python -m src.agent index` скачает модель эмбеддингов `paraphrase-multilingual-mpnet-base-v2` (~1.1 ГБ) — только когда вы соберёте RAG-индекс.
 
 ### Шаг 6. Создайте локальный файл настроек
 
-    # macOS / Linux
-    cp config/settings.example.toml config/settings.toml
+```
+# macOS / Linux
+cp config/settings.example.toml config/settings.toml
 
-    # Windows (PowerShell)
-    Copy-Item config\settings.example.toml config\settings.toml
+# Windows (PowerShell)
+Copy-Item config\settings.example.toml config\settings.toml
+```
 
 Файл `config/settings.toml` не попадает в git — это ваши личные настройки.
 
 ### Шаг 7a. Проверьте, что всё работает
 
-    pytest -v
+```
+pytest -v
+```
 
 Все тесты должны быть зелёными. Благодаря `pyproject.toml` с `pythonpath = ["."]` тесты запускаются из любой папки проекта.
 
 Запустите агент с одной задачей (реальная модель):
 
-    python scripts/run_agent.py "Сохрани заметку 'Тест запуска' с текстом 'Привет'"
+```
+python -m agent run "Сохрани заметку 'Тест запуска' с текстом 'Привет'"
+```
 
 Первый запуск может занять несколько минут: модель загружается в память, а генерация на CPU медленная. В итоге в `data/notes/` появится файл с заметкой, а в консоли — строка вида `Готово: ...`.
 
-**Важно:** скрипт можно запускать из любой папки — конфиг и данные ищутся от корня проекта, а не от текущей директории (шаг 6.7). Например, из `C:\`:
+**Важно:** скрипт можно запускать из любой папки — конфиг и данные ищутся от корня проекта, а не от текущей директории. Например, из `C:\`:
 
-    python D:\projects\ai-local-agent\scripts\run_agent.py "Покажи все заметки"
+```
+python D:\projects\ai-local-agent\scripts\run_agent.py "Покажи все заметки"
+```
+
+(`scripts\run_agent.py` — deprecated-обёртка, работает для обратной совместимости. Основная форма — `python -m agent run "..."`.)
 
 ### Шаг 7b. Соберите RAG-индекс (опционально)
 
 Если хотите искать по документам:
 
-1. Положите `.md` или `.txt` файлы в `data/documents/` (можно в подпапки).
+1. Положите `.md`, `.txt` или `.pdf` файлы в `data/documents/` (можно в подпапки).
 2. Соберите индекс:
 
-       python scripts/build_index.py --reset
+```
+python -m agent index --reset
+```
 
-Первый запуск скачает модель эмбеддингов (~1.1 ГБ) и построит индекс. Для 50 файлов — 2–5 минут.
+Первый запуск скачает модель эмбеддингов (~1.1 ГБ) и построит индекс. Для 50 файлов — 2–5 минут. Для 3000 чанков (например, PDF на 400 страниц) — около 2 минут на CPU.
 
 3. Проверьте, что поиск работает (без LLM):
 
-       python scripts/search_documents.py --query "тестовый запрос" --top-k 3
+```
+python -m agent search "тестовый запрос" --top-k 3
+```
 
 ---
 
 ## Как пользоваться агентом
 
-### Запуск одной задачи
+Все команды — через `python -m agent <command>`. Если вы не делали `pip install -e .`, используйте `python -m src.agent <command>`.
 
-    python scripts/run_agent.py "Сохрани заметку 'Список покупок' с текстом 'Молоко, хлеб, яйца'"
+### `run` — одна задача агенту
+
+```
+python -m agent run "Сохрани заметку 'Список покупок' с текстом 'Молоко, хлеб, яйца'"
+```
 
 Скрипт выполнит цель, напечатает финальный ответ и (если инструмент вернул путь) — путь к созданному файлу.
 
 Если задача не удалась, будет напечатана причина:
 
-    Не удалось выполнить задачу. Шагов: 1
-    Причина: unknown response type: 'unknown'
+```
+Не удалось выполнить задачу. Шагов: 1
+Причина: empty final answer
+```
 
-### Интерактивный режим
+### `chat` — интерактивный режим
 
-    python scripts/run_agent.py
+```
+python -m agent chat
+```
 
-Скрипт запустится один раз и будет спрашивать цели одну за другой. Модель остаётся загруженной в память, поэтому следующие задачи выполняются быстрее, чем при повторном запуске скрипта.
+Скрипт запустится один раз и будет спрашивать цели одну за другой. Модель остаётся загруженной в память, поэтому следующие задачи выполняются быстрее, чем при повторном запуске.
 
-    AI Local Agent (модель: qwen2.5-7b-agent)
-    Введите цель или /quit для выхода.
-    > сохрани заметку про встречу в понедельник
-    [...] выполняется, подождите (на CPU это может занять несколько минут)
-    Готово: Заметка сохранена.
-    Шагов: 2
-    > /quit
-    Выход.
+```
+AI Local Agent (модель: qwen2.5-7b-agent)
+Введите цель или /quit для выхода.
+> сохрани заметку про встречу в понедельник
+[...] выполняется, подождите (на CPU это может занять несколько минут)
+Готово: Заметка сохранена.
+Шагов: 2
+> /quit
+Выход.
+```
 
 Для выхода: `/quit`, `/exit`, `exit`, `quit`, `Ctrl+C` или `Ctrl+D`.
+
+### `ask` — чат с моделью без инструментов
+
+```
+python -m agent ask "кто такой Достоевский?"
+```
+
+Прямой вызов LLM: без SYSTEM_PROMPT, без tools, без оркестратора. Поведение как `ollama run`. Модель отвечает из pretrained-знаний, инструменты недоступны.
+
+Без аргумента — интерактивный чат:
+
+```
+python -m agent ask
+> что такое RAG?
+> /quit
+```
+
+**Когда использовать:** общие вопросы (литература, история, код, наука), не связанные с вашим проектом или документами. Для вопросов про проект/документы — `run` с `search_documents`.
+
+**Ограничение:** 7B на общих знаниях может ошибаться в деталях (например, назвать Достоевского «романтиком»). Это ограничение модели, не проекта.
+
+### `index` — пересборка RAG-индекса
+
+```
+python -m agent index              # инкрементально (пока не реализовано, работает как --reset)
+python -m agent index --reset      # перезаписать существующий индекс
+python -m agent index --documents "D:\Knowledge"
+python -m agent index --batch-size 64
+```
+
+Переиндексация нужна после добавления или изменения документов. Эмбеддинги и чанки не меняются при смене LLM — модель 3B ↔ 7B на индекс не влияет.
+
+### `search` — отладка retrieval без LLM
+
+```
+python -m agent search "OSPF" --top-k 3
+python -m agent search "требования" --top-k 5 --no-truncate
+```
+
+Показывает, какие чанки находит гибридный поиск (BM25 + векторный) до синтеза ответа. Полезно, если ответ агента кажется нерелевантным: сначала проверьте retrieval, потом вините модель.
 
 ### Типичные проблемы при запуске
 
 - **Ollama не отвечает.** Запустите `ollama serve` в отдельном терминале и повторите.
 - **Не найден файл настроек.** Скопируйте `config/settings.example.toml` в `config/settings.toml`.
 - **Достигнут лимит шагов.** Модель не смогла дойти до финала за `max_steps` шагов. Сформулируйте цель точнее или увеличьте `max_steps` в `config/settings.toml`.
+- **`FileNotFoundError: index not found`.** RAG-индекс не собран. Выполните `python -m agent index --reset`.
 
 ---
 
@@ -223,6 +328,7 @@
 - **Заметки:** `data/notes/`
 - **Документы для RAG:** `data/documents/`
 - **Векторный индекс:** `data/index/`
+- **Сгенерированные документы:** `data/generated/` (по шаблону через `write_document`)
 - **Логи:** `logs/agent.log`
 - **Настройки:** `config/settings.toml`
 
@@ -230,384 +336,7 @@
 
 ---
 
-## Что происходит после запуска команды — пошаговый разбор
-
-Этот раздел — учебный. Он показывает весь путь от нажатия Enter до появления файла с заметкой: какие функции вызываются, в каком порядке, какие данные передаются между ними. Если вы новичок в программировании, читайте его после того, как хотя бы один раз успешно запустили агента — так будет понятнее.
-
-### Команда, которую мы разбираем
-
-    python scripts/run_agent.py "Сохрани заметку 'Тест запуска' с текстом 'Привет'"
-
-- `python` — интерпретатор Python.
-- `scripts/run_agent.py` — точка входа, «кнопка включения» агента.
-- `"Сохрани заметку 'Тест запуска' с текстом 'Привет'"` — **аргумент командной строки**, цель агента. Кавычки нужны, чтобы оболочка не разбила фразу на отдельные слова.
-
-### Общая картина
-
-Три фазы:
-
-1. **Подготовка.** Python читает конфиг, настраивает логи, собирает оркестратор с инструментами и моделью.
-2. **Работа агента.** Оркестратор в цикле общается с Ollama. Модель решает вызвать `save_note`, оркестратор вызывает функцию, возвращает результат модели, модель говорит «готово».
-3. **Завершение.** Оркестратор возвращает результат, скрипт печатает его и выходит.
-
-### Шаг 1. Python запускает `run_agent.py`
-
-Python открывает файл, находит:
-
-    if __name__ == "__main__":
-        main()
-
-и вызывает `main()`. Параллельно Python импортирует всё из шапки файла:
-
-- `sys`, `argparse`, `logging` — стандартные библиотеки;
-- `load_config` из `src/agent/config.py`;
-- `setup_logging` из `src/agent/logging_setup.py`;
-- `build_orchestrator` из `src/agent/app.py`;
-- `MaxStepsExceeded` из `src/agent/orchestrator.py`.
-
-Импорт — это «подключение»: Python читает файл и делает функции и классы доступными.
-
-### Шаг 2. `main()` разбирает аргументы командной строки
-
-    parser = argparse.ArgumentParser(description="AI Local Agent")
-    parser.add_argument("goal", nargs="?", help="...")
-    args = parser.parse_args()
-
-- `add_argument("goal", nargs="?")` — позиционный аргумент `goal`, необязательный.
-- `parse_args()` раскладывает слова после имени скрипта. В нашем случае `args.goal == "Сохрани заметку 'Тест запуска' с текстом 'Привет'"`.
-
-Если аргумента нет, `args.goal is None` — скрипт перейдёт в интерактивный режим.
-
-### Шаг 3. `load_config()` читает настройки
-
-    try:
-        config = load_config()
-    except FileNotFoundError:
-        ...
-        sys.exit(1)
-
-`load_config()` (из `src/agent/config.py`):
-
-1. Определяет путь к файлу: `_PROJECT_ROOT / "config" / "settings.toml"`, где `_PROJECT_ROOT = Path(__file__).resolve().parents[2]`. Это **корень проекта**, а не CWD (шаг 6.7, T22).
-2. Открывает файл и читает TOML через стандартный `tomllib`.
-3. Превращает данные в датаклассы:
-   - `LLMConfig(model, base_url, temperature, max_tokens, max_steps)` — без `provider` (шаг 6.7, T27);
-   - `PathsConfig(data_dir, notes_dir, inbox_dir, photos_dir, documents_dir, index_dir, logs_dir, memory, tools)` — относительные пути резолвятся от `_PROJECT_ROOT` через `_resolve_path` (шаг 6.7, T22);
-   - `SafetyConfig(confirm_file_operations, max_tool_retries)` — без `allow_shell`/`allow_network` (шаг 6.7, T21);
-   - `RAGConfig(embedding_model, chunk_size, chunk_overlap, top_k)` — параметры RAG (шаг 7.1);
-   - `AppConfig(llm, paths, safety, rag)`.
-4. Возвращает `AppConfig`.
-
-Если файла нет — `FileNotFoundError`, `main()` печатает путь, по которому искал, и выходит с кодом 1.
-
-Ключевой момент: `config` — это не словарь. Это объект, в котором по атрибутам доступны значения: `config.llm.model`, `config.paths.notes_dir`. Такой подход называется **типизированной конфигурацией**: IDE подсказывает поля, опечатки ловятся сразу.
-
-### Шаг 4. `setup_logging()` готовит логи
-
-    logger = setup_logging(config.paths.logs_dir)
-
-Функция из `src/agent/logging_setup.py`:
-
-1. Создаёт папку `logs/`, если её нет.
-2. Настраивает логгер `"agent"` — один на весь проект.
-3. Добавляет два обработчика: файл `logs/agent.log` (UTF-8, append) и консоль.
-4. Формат: `время | уровень | имя логгера | сообщение`.
-5. Возвращает логгер.
-
-`setup_logging` защищена от дубликатов: повторный вызов не добавит вторые обработчики.
-
-### Шаг 5. `build_orchestrator()` собирает агента
-
-    orchestrator = build_orchestrator(config, logger)
-
-Функция из `src/agent/app.py`:
-
-**5.1. Создаёт реестр.**
-
-    registry = ToolRegistry()
-
-**5.2. Регистрирует все инструменты из единого списка.**
-
-    ALL_TOOLS = [
-        SAVE_NOTE_TOOL,
-        READ_NOTES_TOOL,
-        SEARCH_NOTES_TOOL,
-        SEARCH_DOCUMENTS_TOOL,
-    ]
-    for tool in ALL_TOOLS:
-        registry.register(tool)
-
-`ALL_TOOLS` — единственное место, где перечислены инструменты (шаг 6.6, T15). Если добавить новый, достаточно дописать в `ALL_TOOLS` — он попадёт и в реестр, и в `tools` для LLM.
-
-**5.3. Создаёт клиент к Ollama.**
-
-    llm = OllamaLLM(
-        model=config.llm.model,
-        base_url=config.llm.base_url,
-        tools=ALL_TOOLS,
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
-    )
-
-`OllamaLLM` (из `src/agent/llm_ollama.py`) — обёртка над HTTP. В конструкторе ничего не отправляется, только запоминаются параметры. `temperature`/`max_tokens` передаются в payload, только если заданы (шаг 6.5, T10).
-
-**5.4. Готовит `tool_context`.**
-
-    tool_context = {
-        name: {"notes_dir": config.paths.notes_dir}
-        for name in TOOLS_WITH_NOTES_DIR
-    }
-
-`TOOLS_WITH_NOTES_DIR` — список инструментов, которым нужен `notes_dir` (`save_note`, `read_notes`, `search_notes`). `search_documents` работает с `index_dir` через `load_config()` лениво, в `tool_context` не входит (шаг 7.2).
-
-**5.5. Создаёт оркестратор.**
-
-    return Orchestrator(
-        llm=llm,
-        registry=registry,
-        logger=logger,
-        max_steps=config.llm.max_steps,
-        tool_context=tool_context,
-        max_tool_failures=config.safety.max_tool_retries,
-    )
-
-`max_tool_failures` приходит из `SafetyConfig.max_tool_retries` (по умолчанию 2, шаг 6.7, T21).
-
-`tool_context` — важная деталь. Модель не должна знать, куда сохранять файлы. Путь приходит из конфига. Даже если модель попытается подменить `notes_dir`, `{**args, **extra}` перекроет её аргумент.
-
-### Шаг 6. `main()` вызывает `_run_one()`
-
-    if args.goal:
-        _run_one(orchestrator, args.goal, logger)
-        return
-
-`_run_one` печатает предупреждение:
-
-    [...] выполняется, подождите (на CPU это может занять несколько минут)
-
-Это не косметика: на CPU первая задача может занять 1–3 минуты (для 7B — дольше).
-
-Затем вызывает:
-
-    result = orchestrator.run(goal)
-
-### Шаг 7. `Orchestrator.run()` — начало цикла
-
-**7.1. Инициализирует историю с системным промптом.**
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": goal},
-    ]
-
-`SYSTEM_PROMPT` содержит список инструментов, правило «вопрос про проект → `search_documents`», few-shot примеры и инструкцию «не выдумывай». Это результат итераций 6.1, 6.4, 7.2.1, 7.2.2.
-
-**7.2. Запускает цикл до `max_steps`.**
-
-    executed_calls: set[str] = set()
-    failed_calls: dict[str, int] = {}
-    for step in range(1, self.max_steps + 1):
-
-- `executed_calls` — множество успешно выполненных вызовов в этой задаче. Для защиты от повторных вызовов.
-- `failed_calls` — счётчик ошибок по ключу вызова. Для защиты от долбёжки падающего инструмента (шаг 6.5, T11).
-
-Оба живут только внутри `run`, между задачами не переносятся.
-
-**7.3. Отправляет историю модели.**
-
-    response = self.llm.chat(messages)
-
-`OllamaLLM.chat`:
-
-1. Преобразует `tools` в формат OpenAI.
-2. Формирует POST на `http://localhost:11434/v1/chat/completions`.
-3. Ждёт ответ (десятки секунд на CPU).
-4. Разбирает JSON → `LLMResponse`.
-
-Если ответ кривой (`JSONDecodeError`, пустые `choices`, нет `message`) — `RuntimeError` с понятным текстом (шаг 6.5, T9).
-
-**7.4. Модель решает вызвать инструмент.**
-
-Ollama возвращает `tool_calls`, где `arguments` — строка JSON. `OllamaLLM.chat` делает `json.loads(...)` и возвращает `LLMResponse(type="tool_call", tool_name="save_note", tool_arguments={"title": "...", "content": "..."})`.
-
-**7.5. Оркестратор готовит аргументы.**
-
-    extra = self.tool_context.get("save_note", {})
-    arguments = {**response.tool_arguments, **extra}
-
-`extra` идёт **после** — контекст перекрывает аргументы модели. Если бы модель передала `notes_dir="C:/Windows"`, контекст бы это перекрыл.
-
-**7.6. Проверка на повторный вызов и на лимит падений.**
-
-Оркестратор строит ключ вызова:
-
-    call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
-
-Три ветки:
-
-- **`SKIPPED`** — если `call_key in executed_calls` (тот же вызов уже успешно выполнялся). Модели возвращается `tool_result: SKIPPED. ... Respond with a final answer now.`
-- **`ERROR` (giving up)** — если `failed_calls[call_key] >= max_tool_failures`. Модели возвращается `ERROR: failed N times in a row, giving up. Do NOT call it again.`
-- **обычный вызов** — `registry.call(...)`. При успехе `executed_calls.add(call_key)`. При исключении `failed_calls[call_key] += 1`.
-
-**7.7. Формирует `tool_result` для модели.**
-
-    if tool_status == "SKIPPED":
-        content = f"tool_result: SKIPPED. {tool_name} {result}. Respond with a final answer now."
-    else:
-        content = f"tool_result: {tool_status}. {tool_name} returned: {result}. If this satisfies the user's goal, respond with a final answer now."
-
-Три статуса `SUCCESS` / `ERROR` / `SKIPPED` — вместо прежнего булева `tool_succeeded` (шаг 6.5, T1). Модель видит явный статус и точную инструкцию.
-
-### Шаг 8. `ToolRegistry.call()` вызывает функцию
-
-`registry.call`:
-
-1. `tool = self.get("save_note")` — находит `ToolDefinition`. Если нет — `KeyError`.
-2. `func = tool.func` — достаёт функцию.
-3. `return func(**arguments)` — вызывает с именованными аргументами.
-
-Тонкая обёртка, но нужна: оркестратор не знает имён функций заранее (модель возвращает имя строкой).
-
-### Шаг 9. `save_note()` создаёт файл
-
-Функция из `src/agent/tools/save_note.py`:
-
-1. **Проверка заголовка:** пустой `title` → `ValueError`.
-2. **Создание папки:** `notes_dir.mkdir(parents=True, exist_ok=True)`.
-3. **Slug:** нижний регистр, пробелы → `_`, удаление запрещённых символов и управляющих, сохранение Unicode, обрезка до 100, `rstrip(" .")`, экранирование Windows-зарезервированных имён (`CON`, `NUL`, `COM1..9`, `LPT1..9`) префиксом `_` (шаг 6.6, T17). Пустой slug → `"note"`.
-4. **Поиск свободного имени:** `slug.md`, `slug_1.md`, `slug_2.md`, … — **никогда не перезаписывает**.
-5. **Запись:** `# {title}\n\n{content}\n`, UTF-8.
-6. **Возврат:** `Path` к созданному файлу.
-
-### Шаг 10. Оркестратор возвращает результат модели
-
-Вернувшись в `Orchestrator.run`:
-
-1. Пишет краткий результат в лог через `_summarize_for_log(result)`. Для `Path` — путь, для списка — `list[N]`, для длинной строки — обрезка. Полные тексты заметок и документов в лог **не** попадают (шаг 6.7, T25).
-2. Добавляет в `messages` два сообщения: `assistant(tool_call: save_note({...}))` и `user(tool_result: SUCCESS. ...)`.
-3. **Переходит на следующую итерацию.** Вызывает `llm.chat(messages)` с расширенной историей.
-
-### Шаг 11. Второй запрос — финал
-
-Модель видит:
-
-- системный промпт;
-- цель пользователя;
-- свой `tool_call`;
-- `tool_result: SUCCESS. save_note returned: data/notes/тест_запуска.md. If this satisfies...`.
-
-Модель решает: «задача выполнена». Ollama возвращает JSON без `tool_calls`, только с текстом. `OllamaLLM.chat` возвращает `LLMResponse(type="final", content="Заметка сохранена.")`.
-
-Оркестратор:
-
-    return OrchestratorResult(
-        success=True,
-        final_answer="Заметка сохранена.",
-        steps_used=2,
-        tool_results=["data/notes/тест_запуска.md"],
-    )
-
-`steps_used=2` — два обращения к модели: `tool_call` + `final`.
-
-### Шаг 12. `_run_one` печатает результат
-
-    if result.success:
-        print(f"Готово: {result.final_answer}")
-        print(f"Шагов: {result.steps_used}")
-        if result.tool_results:
-            print(f"Результаты инструментов: {result.tool_results}")
-    else:
-        print(f"Не удалось выполнить задачу. Шагов: {result.steps_used}")
-        if result.error:
-            print(f"Причина: {result.error}")
-
-В консоли:
-
-    [...] выполняется, подождите (на CPU это может занять несколько минут)
-    Готово: Заметка сохранена.
-    Шагов: 2
-    Результаты инструментов: ['data/notes/тест_запуска.md']
-
-### Шаг 13. Что осталось на диске
-
-- **`data/notes/тест_запуска.md`** — новая заметка. Содержимое:
-
-      # Тест запуска
-
-      Привет
-
-  При повторном запуске с тем же заголовком появится `тест_запуска_1.md`.
-
-- **`logs/agent.log`** — строки вида:
-
-      2026-10-29 12:34:56,789 | INFO | agent | step=1 type=tool_call
-      2026-10-29 12:34:58,012 | INFO | agent | tool save_note -> data/notes/тест_запуска.md
-      2026-10-29 12:35:10,345 | INFO | agent | step=2 type=final
-      2026-10-29 12:35:10,346 | INFO | agent | final: Заметка сохранена.
-
-- **`config/settings.toml`, `data/`, `logs/`** — не попадают в git.
-
-### Полная цепочка вызовов (краткая схема)
-
-    python scripts/run_agent.py "<цель>"
-    └── run_agent.main()
-        ├── argparse.parse_args() → args.goal
-        ├── config.load_config() → AppConfig   (пути от _PROJECT_ROOT)
-        ├── logging_setup.setup_logging() → logger
-        ├── app.build_orchestrator(config, logger)
-        │   ├── ToolRegistry()
-        │   ├── for tool in ALL_TOOLS: registry.register(tool)
-        │   ├── OllamaLLM(model, base_url, tools=ALL_TOOLS, temperature, max_tokens)
-        │   └── Orchestrator(..., max_tool_failures=config.safety.max_tool_retries)
-        ├── run_agent._run_one(orchestrator, goal, logger)
-        │   └── orchestrator.run(goal)
-        │       ├── messages = [system, user(goal)]
-        │       ├── executed_calls = set(); failed_calls = {}
-        │       ├── for step in 1..max_steps:
-        │       │   ├── llm.chat(messages) → tool_call | final | unknown
-        │       │   ├── if final: return OrchestratorResult(success=True, ...)
-        │       │   ├── if tool_call:
-        │       │   │   ├── call_key = tool + sorted(args)
-        │       │   │   ├── if call_key in executed_calls: SKIPPED
-        │       │   │   ├── elif failed_calls[call_key] >= max_tool_failures: ERROR (giving up)
-        │       │   │   └── else: registry.call(tool, **args) → SUCCESS | ERROR
-        │       │   └── messages += [assistant(tool_call), user(tool_result)]
-        │       ├── if unknown: return OrchestratorResult(success=False, error=...)
-        │       └── raise MaxStepsExceeded
-        └── print("Готово: ...")
-
-### Где что искать в коде
-
-| Что происходит | Файл | Функция / класс |
-| :--- | :--- | :--- |
-| Точка входа | `scripts/run_agent.py` | `main`, `_run_one` |
-| Чтение конфига | `src/agent/config.py` | `load_config`, `_PROJECT_ROOT`, `_resolve_path` |
-| Логирование | `src/agent/logging_setup.py` | `setup_logging` |
-| Сборка агента | `src/agent/app.py` | `build_orchestrator`, `ALL_TOOLS` |
-| Цикл «цель → инструмент → результат» | `src/agent/orchestrator.py` | `Orchestrator.run`, `SYSTEM_PROMPT`, `_summarize_for_log` |
-| Клиент к Ollama | `src/agent/llm_ollama.py` | `OllamaLLM.chat` |
-| Реестр инструментов | `src/agent/registry.py` | `ToolRegistry.call`, `ToolDefinition` |
-| Сохранение заметки | `src/agent/tools/save_note.py` | `save_note`, `_make_slug`, `SAVE_NOTE_TOOL` |
-| Поиск по названию | `src/agent/tools/read_notes.py` | `read_notes`, `READ_NOTES_TOOL` |
-| Поиск по содержимому заметок | `src/agent/tools/search_notes.py` | `search_notes`, `SEARCH_NOTES_TOOL` |
-| Поиск по документам | `src/agent/tools/search_documents.py` | `search_documents`, `SEARCH_DOCUMENTS_TOOL` |
-| Стемминг и чтение заметок | `src/agent/tools/_search.py` | `find_match`, `find_match_with_kind`, `iter_md_files`, `load_note` |
-| Извлечение текста из файлов | `src/agent/extractors/` | `extract_text`, `MarkdownExtractor`, `TxtExtractor` |
-| Обход документов | `src/agent/indexer.py` | `index_documents`, `iter_document_files` |
-| RAG: chunking, embeddings, search | `src/agent/rag/` | `chunk_document`, `Embedder`, `VectorStore`, `BM25Index` |
-
-### Что важно понять из этого разбора
-
-1. **Агент — это цикл, а не один запрос.** Модель вызывается минимум дважды: чтобы выбрать инструмент и чтобы подтвердить финал.
-2. **Модель не пишет код и не трогает файлы напрямую.** Она возвращает «запрос на вызов», остальное делает Python.
-3. **Контекст инструментов — это защита.** Модель не знает, куда сохранять файлы.
-4. **Три линии защиты от зацикливания:** системный промпт, детектор `executed_calls` (для успешных повторов), счётчик `failed_calls` (для падающих).
-5. **Логи — главный инструмент отладки.** Полные тексты заметок в лог не пишутся, но тип ответа, имя инструмента и статус — видны.
-6. **Медленно — это нормально.** На CPU 7B-модель генерирует 2–5 токенов в секунду.
-
----
-
-## Работа с заметками: сохранение, поиск, чтение
+## Работа с заметками
 
 Агент работает с заметками в `data/notes/` через три инструмента:
 
@@ -619,177 +348,297 @@ Ollama возвращает `tool_calls`, где `arguments` — строка JS
 
 `max_results` в обоих инструментах опционален. Если модель передаёт `null` — подставляется дефолт (50 / 5). Если `<= 0` — возвращается пустой список.
 
-### Примеры запуска
+### Примеры
 
 **Сохранение новой заметки**
 
-    python scripts/run_agent.py "Сохрани заметку 'Список покупок' с текстом 'Молоко, хлеб, яйца'"
+```
+python -m agent run "Сохрани заметку 'Список покупок' с текстом 'Молоко, хлеб, яйца'"
+```
 
 Создаст `data/notes/список_покупок.md`:
 
-    # Список покупок
+```
+# Список покупок
 
-    Молоко, хлеб, яйца
-
-**Сохранение второй заметки с тем же названием**
-
-    python scripts/run_agent.py "Сохрани заметку 'Список покупок' с текстом 'Ещё один список'"
-
-Создаст `список_покупок_1.md`. Первый файл не изменится.
+Молоко, хлеб, яйца
+```
 
 **Поиск по названию**
 
-    python scripts/run_agent.py "Покажи заметки про покупки"
+```
+python -m agent run "Покажи заметки про покупки"
+```
 
 `read_notes(query="покупки")` найдёт `список_покупок.md` — стем «покуп» покрывает разницу в окончании.
 
 **Поиск по содержимому**
 
-    python scripts/run_agent.py "В какой заметке я упоминал документы?"
+```
+python -m agent run "В какой заметке я упоминал документы?"
+```
 
 `search_notes(query="документы")` вернёт «Идеи проекта» с фрагментом «…Сделать локального агента для документов».
-
-**Показать все заметки**
-
-    python scripts/run_agent.py "Покажи все заметки"
-
-**Проверка, что агент не вызывает инструменты зря**
-
-    python scripts/run_agent.py "Какая сегодня погода?"
-
-Агент ответит, что прогноз погоды вне его возможностей, и не вызовет ни один инструмент.
-
-### Интерактивный режим
-
-    python scripts/run_agent.py
-
-    AI Local Agent (модель: qwen2.5-7b-agent)
-    Введите цель или /quit для выхода.
-    > Покажи все заметки
-    [...] выполняется, подождите
-    Готово: Вот все мои заметки: ...
-    > /quit
-    Выход.
-
-Второй запрос выполняется быстрее первого: модель уже загружена.
-
-### Как понять, что агент выбрал правильный инструмент
-
-Каждый запуск пишет в `logs/agent.log`:
-
-    step=1 type=tool_call
-    tool read_notes -> list[2]
-    step=2 type=final
-
-- `type=tool_call` и `tool_name` — какой инструмент выбрала модель.
-- `tool <name> -> ...` — краткий результат (для списков — `list[N]`, для `Path` — путь; полные тексты не пишутся, шаг 6.7, T25).
-- `step=2 type=final` — модель завершила задачу.
-
-Если после `tool_call` идёт **второй** `tool_call` с тем же именем и аргументами — сработала защита от повторов: второй вызов пропускается, модели возвращается `SKIPPED`. В норме этого не происходит.
-
-### Известные ограничения текущей версии
-
-- **Скорость 7B на CPU.** Один вопрос по документам — 1.5–3 минуты (два вызова модели + загрузка, если Ollama выгрузила её между вопросами). 3B быстрее, но путает `search_documents`/`search_notes` и иногда выдаёт пустые ответы. Подробнее — в разделе «Выбор модели».
-- **Галлюцинации на неполных запросах.** На `"Запиши заметку в файл"` без содержания модель может придумать заголовок. Промпт `save_note` просит уточнения (шаг 6.7, T26), но на 7B галлюцинация не устранена полностью. Если содержание важно — указывайте его явно в кавычках.
-- **Стемминг в заметках — эвристика.** `find_match` ищет подстроку; `search_notes.matches` использует `\b`-границу, но `find_match` по-прежнему подстрочный (T28 — закроется при унификации стемминга в 7.1.4).
-- **RAG работает только на Markdown и TXT.** PDF, DOCX, HTML, EPUB — в шаге 7.4, через реестр экстракторов.
-- **Один инструмент за шаг.** Для двух действий — два запроса.
-- **Ответы на английском.** Иногда 7B отвечает по-английски. Это ограничение модели, не архитектуры.
 
 ---
 
 ## Работа с документами (RAG)
 
-Агент ищет по Markdown и TXT-файлам в `data/documents/` через `search_documents`.
+Агент ищет по Markdown, TXT и PDF в `data/documents/` через `search_documents`.
 
 | Шаг | Команда |
 | :--- | :--- |
-| 1. Положить документы | Скопировать `.md`/`.txt` в `data/documents/` (можно в подпапки) |
-| 2. Собрать индекс | `python scripts/build_index.py --reset` |
-| 3. Спросить | `python scripts/run_agent.py "Что в документах про X?"` |
+| 1. Положить документы | Скопировать `.md`/`.txt`/`.pdf` в `data/documents/` (можно в подпапки) |
+| 2. Собрать индекс | `python -m agent index --reset` |
+| 3. Спросить | `python -m agent run "Что в документах про OSPF?"` |
 
-**Переиндексация** нужна только после добавления или изменения документов. Эмбеддинги и чанки не меняются при смене LLM — модель 3B ↔ 7B на индекс не влияет.
+**Переиндексация** нужна только после добавления или изменения документов. Эмбеддинги и чанки не меняются при смене LLM.
 
 **Отладка поиска без LLM:**
 
-    python scripts/search_documents.py --query "тестовый запрос" --top-k 3
+```
+python -m agent search "OSPF" --top-k 3
+```
 
 Показывает, какие чанки находит гибридный поиск (BM25 + векторный) до синтеза ответа.
 
 ### Как это устроено
 
-1. **Извлечение.** `src/agent/extractors/` — реестр экстракторов. Сейчас `MarkdownExtractor` (режет по заголовкам `#`, убирает code blocks, ссылки, изображения) и `TxtExtractor` (один сегмент). Новый формат = новый модуль + одна строка регистрации.
+1. **Извлечение.** `src/agent/extractors/` — реестр экстракторов:
+   - `MarkdownExtractor` (`.md`): режет по заголовкам `#`, убирает code blocks, ссылки, изображения, HTML-теги.
+   - `TxtExtractor` (`.txt`): один сегмент.
+   - `PdfExtractor` (`.pdf`): страница → сегмент с `section="Страница N"`; страницы без текстового слоя (сканы) пропускаются.
+   - Новый формат = новый модуль + одна строка `register(...)` в `src/agent/extractors/__init__.py`. RAG не меняется.
 2. **Чанкинг.** `src/agent/rag/chunker.py` — режет сегменты на куски по 400 символов с перекрытием 100. Старается не рвать на полуслове.
 3. **Эмбеддинги.** `src/agent/rag/embedder.py` — модель `paraphrase-multilingual-mpnet-base-v2` (768-dim, мультиязычная). Ленивая загрузка: модель грузится только при первом поиске или сборке индекса.
 4. **Хранение.** `src/agent/rag/store.py` — `data/index/vectors.npy` + `chunks.json` + `meta.json`. Простое numpy-хранилище, без ChromaDB. Для 100 000+ чанков — миграция на faiss.
-5. **Поиск.** `src/agent/rag/bm25.py` — BM25 (лексический). `VectorStore.search_hybrid` — объединяет BM25 и векторный через RRF (Reciprocal Rank Fusion). Гибрид находит и точные термины («16 ГБ»), и семантику («оперативная память»).
+5. **Поиск.** `src/agent/rag/bm25.py` — BM25 (лексический, со стеммингом `src/agent/stem.py`). `VectorStore.search_hybrid` — объединяет BM25 и векторный через RRF (Reciprocal Rank Fusion). Гибрид находит и точные термины («16 ГБ»), и семантику («оперативная память»).
 
-### Примеры
+### Ограничение hybrid search (C5)
 
-**Собрать индекс:**
+BM25 в изоляции находит «Установка с нуля» по запросу «Как установить агента с нуля?» со score 8.766. Но `search_hybrid` возвращает «Как понять, что агент выбрал…» — потому что `mpnet-base-v2` ставит этот чанк vector top-1, а «Установка» не попадает в vector top-10. RRF использует ранги, не score — преимущество BM25 теряется.
 
-    python scripts/build_index.py --reset
+**Причина:** семантическая близость «как установить» и «как понять, что агент…». Не размер корпуса (проверено на 94 и 3116 чанках — результат одинаковый).
 
-Первый запуск скачает модель эмбеддингов (~1.1 ГБ). Для 50 файлов — 2–5 минут.
+**Что работает:** «требования к оперативной памяти», «16 ГБ», «как настроить OSPF» — находятся корректно.
 
-**Найти без LLM:**
+**Обход для пользователя:** уточнять запрос — «по названию раздела», «что в документации про установку».
 
-    python scripts/search_documents.py --query "требования к оперативной памяти" --top-k 3
+---
 
-**Спросить через агента:**
+## Генерация документа по шаблону
 
-    python scripts/run_agent.py "Какие требования к оперативной памяти?"
+Агент умеет создавать новые документы по структуре существующих — через `read_document` + `write_document`.
 
-Агент вызовет `search_documents`, получит 5 чанков и ответит по ним. В логе — `tool search_documents -> list[5]`.
+**Шаг 1.** Положите шаблон в `data/documents/template.md`:
+
+```
+# Отчёт по проекту
+
+## 1. Введение
+
+Краткое описание проекта.
+
+## 2. Цели и задачи
+
+Список целей.
+
+## 3. Результаты
+
+Что достигнуто.
+
+## 4. Выводы
+
+Итоги.
+```
+
+**Шаг 2.** Запустите:
+
+```
+python -m agent run "Прочитай шаблон data/documents/template.md и создай по нему новый документ: отчёт по разработке AI-агента"
+```
+
+**Что произойдёт (в логе `logs/agent.log`):**
+
+```
+step=1 type=tool_call tool_name=read_document
+tool read_document -> dict (path, text, truncated, total_chars, suffix)
+step=2 type=tool_call tool_name=write_document
+tool write_document -> dict (path, title, size_chars)
+step=3 type=final
+```
+
+**Результат:** `data/generated/отчёт_по_разработке_ai-агента.md` — 4 секции как в шаблоне, содержание новое.
+
+**Как это работает:**
+- `read_document(path, max_chars=4000)` — читает документ, склеивает сегменты через `\n\n`, включает `## section` в текст (иначе шаблон теряет структуру). Защита от path traversal: путь должен быть внутри корня проекта.
+- `write_document(title, content)` — обёртка над `save_note`: если `content` начинается с `# title`, дубль убирается (иначе получится два заголовка). Сохраняет в `data/generated/`.
+- `SYSTEM_PROMPT` содержит правило: «после `read_document` сразу вызови `write_document` через tool_call, не пиши имя инструмента текстом».
+
+**Ограничение 7B (C6):** модель генерирует обобщённое содержание («Интеграция с CRM успешно завершена», «Создание базы данных»), не зная реального контекста проекта. Для точности — уточняйте в задаче конкретику: «включи цели: локальность, RAG, 7B; результаты: save_note, read_notes, search_documents».
+
+---
+
+## Пошаговый разбор: что происходит после запуска команды
+
+Этот раздел — учебный. Он показывает путь от нажатия Enter до появления файла с заметкой.
+
+### Команда, которую разбираем
+
+```
+python -m agent run "Сохрани заметку 'Тест запуска' с текстом 'Привет'"
+```
+
+- `python` — интерпретатор.
+- `-m agent` — запуск пакета `agent` (`src/agent/__main__.py`).
+- `run` — подкоманда (одна задача).
+- `"..."` — цель агента.
+
+### Что происходит внутри
+
+**1. `__main__.py` → `main()`.** Python читает `src/agent/__main__.py`, находит `if __name__ == "__main__": main()`. Параллельно импортируются `load_config`, `setup_logging`, `argparse`.
+
+**2. `argparse`.** `parser.parse_args(["run", "..."])` → `args.command="run"`, `args.goal="..."`.
+
+**3. `load_config()`.** Читает `config/settings.toml` от `_PROJECT_ROOT` (не от CWD). Возвращает `AppConfig(llm, paths, safety, rag)` — типизированный объект, не словарь.
+
+**4. `setup_logging(config.paths.logs_dir)`.** Настраивает логгер `"agent"`: файл `logs/agent.log` (UTF-8, append) + консоль. Формат `время | уровень | имя | сообщение`. Защита от дубликатов обработчиков.
+
+**5. `build_orchestrator(config, logger)`** (из `src/agent/app.py`):
+- `tools = build_tools(config)` — список из 6 инструментов. `search_documents` создаётся фабрикой `make_search_documents_tool(config)` (ленивая загрузка `VectorStore` + `Embedder` в замыкании), остальные — модульные константы.
+- `registry = ToolRegistry()`; `for tool in tools: registry.register(tool)`.
+- `llm = OllamaLLM(model=config.llm.model, base_url=..., tools=tools, ...)`.
+- `tool_context`: для каждого инструмента с `needs_notes_dir=True` — `{"notes_dir": config.paths.notes_dir}`; с `needs_output_dir=True` — `{"output_dir": config.paths.generated_dir}`. `search_documents` и `read_document` — без контекста.
+- Возвращает `Orchestrator(llm, registry, logger, max_steps, tool_context, max_tool_failures)`.
+
+**6. `cli.run_once(goal, config, logger)`** → `_run_one(orchestrator, goal, logger)` → `orchestrator.run(goal)`.
+
+**7. `Orchestrator.run(goal)`:**
+- `messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": goal}]`.
+- Цикл до `max_steps`:
+  - `response = self.llm.chat(messages)` — POST в Ollama (`/v1/chat/completions`).
+  - Если `type="final"` и `content` не пустой — вернуть `OrchestratorResult(success=True, final_answer=..., steps_used=step)`. Если пустой — `success=False, error="empty final answer"`.
+  - Если `type="tool_call"`:
+    - `extra = self.tool_context.get(tool_name, {})`.
+    - `arguments = {**response.tool_arguments, **extra}` — контекст перекрывает аргументы модели (защита от prompt injection).
+    - `call_key = f"{tool_name}:{sorted(...)}"` — для детектора повторов.
+    - Если `call_key in executed_calls` → `SKIPPED`; если `failed_calls[call_key] >= max_tool_failures` → `ERROR (giving up)`; иначе — `registry.call(tool_name, **arguments)`.
+    - `messages += [assistant(tool_call), user(tool_result)]` (с `SUCCESS` / `ERROR` / `SKIPPED`).
+- Если цикл кончился без финала — `raise MaxStepsExceeded`.
+
+**8. `ToolRegistry.call("save_note", title=..., content=..., notes_dir=...)`.** Находит `ToolDefinition` по имени, вызывает `func(**kwargs)`.
+
+**9. `save_note(title, content, notes_dir)`** (из `src/agent/tools/save_note.py`):
+- Пустой `title` → `ValueError`.
+- `notes_dir.mkdir(parents=True, exist_ok=True)`.
+- Slug: lower, пробелы → `_`, удаление `<>:"/\|?*` и управляющих, сохранение Unicode, обрезка до 100, `rstrip(" .")`, экранирование Windows-зарезервированных (`CON`, `NUL`, `COM1..9`) префиксом `_`.
+- Поиск свободного имени: `slug.md`, `slug_1.md`, … — **никогда не перезаписывает**.
+- Запись `# {title}\n\n{content}\n` в UTF-8.
+- Возвращает `Path`.
+
+**10. Второй запрос к модели.** `messages` содержит `tool_result: SUCCESS. save_note returned: ...`. Модель отвечает `type="final"`.
+
+**11. `_run_one` печатает:**
+```
+Готово: Заметка сохранена.
+Шагов: 2
+Результаты инструментов: ['data/notes/тест_запуска.md']
+```
+
+**12. На диске:**
+- `data/notes/тест_запуска.md` — с `# Тест запуска\n\nПривет`.
+- `logs/agent.log` — `step=1 type=tool_call`, `tool save_note -> data/notes/...`, `step=2 type=final`, `final: ...`.
+
+### Где что искать в коде
+
+| Что происходит | Файл | Функция / класс |
+| :--- | :--- | :--- |
+| Точка входа | `src/agent/__main__.py` | `main` |
+| Подкоманды | `src/agent/cli.py` | `run_once`, `interactive_loop`, `ask_once`, `build_index_cmd`, `search_cmd` |
+| Чтение конфига | `src/agent/config.py` | `load_config`, `_PROJECT_ROOT`, `_resolve_path` |
+| Логирование | `src/agent/logging_setup.py` | `setup_logging` |
+| Сборка агента | `src/agent/app.py` | `build_orchestrator`, `build_tools` |
+| Цикл «цель → инструмент → результат» | `src/agent/orchestrator.py` | `Orchestrator.run`, `SYSTEM_PROMPT`, `_summarize_for_log` |
+| Клиент к Ollama | `src/agent/llm_ollama.py` | `OllamaLLM.chat` |
+| Реестр инструментов | `src/agent/registry.py` | `ToolRegistry.call`, `ToolDefinition` |
+| Стеммер | `src/agent/stem.py` | `stem` |
+| Сохранение заметки | `src/agent/tools/save_note.py` | `save_note`, `_make_slug` |
+| Поиск по названию | `src/agent/tools/read_notes.py` | `read_notes` |
+| Поиск по содержимому заметок | `src/agent/tools/search_notes.py` | `search_notes` |
+| Поиск по документам (RAG) | `src/agent/tools/search_documents.py` | `make_search_documents_tool`, `_RagContext` |
+| Чтение документа | `src/agent/tools/read_document.py` | `read_document` |
+| Создание документа | `src/agent/tools/write_document.py` | `write_document` |
+| Общие хелперы заметок | `src/agent/tools/_search.py` | `find_match`, `iter_md_files`, `load_note` |
+| Извлечение текста | `src/agent/extractors/` | `extract_text`, `MarkdownExtractor`, `TxtExtractor`, `PdfExtractor` |
+| Обход документов | `src/agent/indexer.py` | `index_documents`, `iter_document_files` |
+| RAG: chunking, embeddings, search | `src/agent/rag/` | `chunk_document`, `Embedder`, `VectorStore`, `BM25Index`, `build_index` |
+
+### Что важно понять
+
+1. **Агент — это цикл, а не один запрос.** Модель вызывается минимум дважды: чтобы выбрать инструмент и чтобы подтвердить финал.
+2. **Модель не пишет код и не трогает файлы напрямую.** Она возвращает «запрос на вызов», остальное делает Python.
+3. **Контекст инструментов — это защита.** Модель не знает, куда сохранять файлы. Путь приходит из конфига через `needs_notes_dir` / `needs_output_dir`.
+4. **Три линии защиты от зацикливания:** системный промпт, детектор `executed_calls` (для успешных повторов), счётчик `failed_calls` (для падающих).
+5. **Логи — главный инструмент отладки.** Полные тексты заметок в лог не пишутся, но тип ответа, имя инструмента и статус — видны.
+6. **Медленно — это нормально.** На CPU 7B-модель генерирует 2–5 токенов в секунду.
 
 ---
 
 ## Структура проекта
 
-    ai-local-agent/
-    ├── README.md
-    ├── ARCHITECTURE.md
-    ├── TASKS.md
-    ├── TODO.md
-    ├── Modelfile                   ← 3B (быстрее, слабее routing)
-    ├── Modelfile.7b                ← 7B (рекомендуется, медленнее)
-    ├── pyproject.toml
-    ├── requirements.txt
-    ├── config/
-    │   ├── settings.example.toml
-    │   └── settings.toml           ← ваши локальные настройки (не в git)
-    ├── src/
-    │   ├── __init__.py
-    │   └── agent/
-    │       ├── config.py           ← загрузка настроек, _PROJECT_ROOT
-    │       ├── logging_setup.py
-    │       ├── registry.py
-    │       ├── llm.py
-    │       ├── llm_ollama.py
-    │       ├── orchestrator.py
-    │       ├── app.py              ← build_orchestrator, ALL_TOOLS
-    │       ├── indexer.py          ← обход документов, extract_text
-    │       ├── extractors/         ← реестр экстракторов (base, markdown, txt)
-    │       ├── rag/                ← chunker, embedder, bm25, store, build
-    │       └── tools/
-    │           ├── stub.py
-    │           ├── save_note.py
-    │           ├── read_notes.py
-    │           ├── search_notes.py
-    │           └── search_documents.py
-    ├── tests/
-    ├── data/                       ← ваши данные (не в git)
-    │   ├── documents/              ← корпус для RAG
-    │   ├── index/                  ← векторный индекс (не в git)
-    │   ├── inbox/
-    │   ├── notes/
-    │   └── photos/
-    ├── logs/                       ← логи (не в git)
-    └── scripts/
-        ├── run_agent.py            ← основная точка входа
-        ├── index_documents.py      ← проверка извлечения без индексации
-        ├── build_index.py          ← сборка RAG-индекса
-        └── search_documents.py     ← отладка поиска без LLM
+```
+ai-local-agent/
+├── README.md
+├── ARCHITECTURE.md
+├── TASKS.md
+├── TODO.md
+├── Modelfile                     ← 3B (быстрее, слабее routing)
+├── Modelfile.7b                  ← 7B (рекомендуется, медленнее)
+├── pyproject.toml                ← конфиг pytest (pythonpath), упаковки (setuptools)
+├── requirements.txt
+├── config/
+│   ├── settings.example.toml
+│   └── settings.toml             ← ваши локальные настройки (не в git)
+├── src/
+│   ├── __init__.py
+│   └── agent/
+│       ├── __main__.py           ← точка входа `python -m agent`
+│       ├── cli.py                ← подкоманды run/chat/ask/index/search
+│       ├── config.py             ← загрузка настроек, _PROJECT_ROOT
+│       ├── logging_setup.py
+│       ├── registry.py           ← ToolDefinition (с needs_*_dir), ToolRegistry
+│       ├── stem.py               ← общий стеммер (префикс 5 символов)
+│       ├── llm.py                ← протокол LLM и FakeLLM для тестов
+│       ├── llm_ollama.py
+│       ├── orchestrator.py       ← цикл, статусы, SYSTEM_PROMPT
+│       ├── app.py                ← build_orchestrator, build_tools
+│       ├── indexer.py            ← обход документов, extract_text
+│       ├── extractors/           ← реестр: base, markdown, txt, pdf
+│       ├── rag/                  ← chunker, embedder, bm25, store, build
+│       └── tools/
+│           ├── stub.py
+│           ├── save_note.py
+│           ├── read_notes.py
+│           ├── search_notes.py
+│           ├── search_documents.py   ← фабрика make_search_documents_tool
+│           ├── read_document.py
+│           ├── write_document.py
+│           └── _search.py
+├── tests/
+├── data/                         ← ваши данные (не в git)
+│   ├── documents/                ← корпус для RAG
+│   ├── index/                    ← векторный индекс (не в git)
+│   ├── generated/                ← документы по шаблону (не в git)
+│   ├── inbox/
+│   ├── notes/
+│   └── photos/
+├── logs/                         ← логи (не в git)
+└── scripts/                      ← deprecated-обёртки (обратная совместимость)
+    ├── run_agent.py
+    ├── build_index.py
+    ├── search_documents.py
+    └── index_documents.py        ← dev-инструмент, не для пользователя
+```
 
 ---
 
@@ -805,7 +654,7 @@ Ollama не запущен. Выполните `ollama serve` в отдельн�
 
 **Модель отвечает очень медленно**
 
-Это нормально для CPU. 7B-модель генерирует 2–5 токенов в секунду. Один запрос по документам — 2–4 минуты. Если критична скорость — переключитесь на 3B (см. раздел «Выбор модели»): быстрее в 2–3 раза, но routing инструментов менее надёжен.
+Это нормально для CPU. 7B-модель генерирует 2–5 токенов в секунду. Один запрос по документам — 2–4 минуты. Если критична скорость — переключитесь на 3B (см. раздел «Выбор модели»).
 
 **`does not support tools` или модель не вызывает инструменты**
 
@@ -821,48 +670,71 @@ Ollama не запущен. Выполните `ollama serve` в отдельн�
 
 **`FileNotFoundError: index not found at ...`**
 
-Вы вызвали `search_documents`, но RAG-индекс не собран. Соберите:
-
-    python scripts/build_index.py --reset
+Вы вызвали `search_documents` или `search`, но RAG-индекс не собран. Соберите: `python -m agent index --reset`.
 
 **`SyntaxError: source code string cannot contain null bytes` в тестах**
 
 Файл повреждён (часто — сохранён в UTF-16). Проверьте кодировку в VS Code (в статус-баре должно быть **UTF-8**), при необходимости «Save with Encoding → UTF-8». Проверить, что в файле нет нулевых байтов:
 
-    Get-ChildItem -Recurse -Filter *.py src, tests | ForEach-Object {
-        $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
-        $nulls = ($bytes | Where-Object { $_ -eq 0 }).Count
-        if ($nulls -gt 0) { Write-Host "$($_.FullName): $nulls nulls" }
-    }
+```
+Get-ChildItem -Recurse -Filter *.py src, tests | ForEach-Object {
+    $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
+    $nulls = ($bytes | Where-Object { $_ -eq 0 }).Count
+    if ($nulls -gt 0) { Write-Host "$($_.FullName): $nulls nulls" }
+}
+```
 
 **Тесты падают, но агент работает**
 
-Возможно, окружение повреждено. Пересоздайте `.venv`: удалите папку, выполните `python -m venv .venv`, активируйте, установите зависимости.
+Возможно, окружение повреждено. Пересоздайте `.venv`: удалите папку, выполните `python -m venv .venv`, активируйте, `pip install -e .`.
 
 **Хочу посмотреть, что делал агент**
 
-Откройте `logs/agent.log`. Там видны типы ответов, имена инструментов, краткие результаты. Полные тексты заметок и документов в лог не пишутся (шаг 6.7, T25).
+Откройте `logs/agent.log`. Там видны типы ответов, имена инструментов, краткие результаты. Полные тексты заметок и документов в лог не пишутся.
 
 **Хочу изменить `max_steps` или `max_tool_retries`**
 
 Отредактируйте `config/settings.toml`:
 
-    [llm]
-    max_steps = 15
+```
+[llm]
+max_steps = 15
 
-    [safety]
-    max_tool_retries = 3
+[safety]
+max_tool_retries = 3
+```
 
 После правки — перезапустите агент.
 
 **RAG находит не то, что нужно**
 
-1. Проверьте, что индекс собран и не пустой: `python -c "from src.agent.rag.store import VectorStore; from src.agent.config import load_config; s = VectorStore.load(load_config().paths.index_dir); print(f'Чанков: {len(s)}')"`
-2. Проверьте retrieval без LLM: `python scripts/search_documents.py --query "..." --top-k 5`
-3. Если retrieval находит мусор — проблема в chunking или эмбеддингах. См. `TODO.md` про оптимизацию поиска.
+1. Проверьте, что индекс собран и не пустой: `python -m agent search "запрос" --top-k 5`.
+2. Если retrieval находит мусор — проблема в chunking или эмбеддингах. См. `TODO.md` про C5 (vector доминирует на семантически близких запросах).
+3. Для точных терминов (номера, аббревиатуры) BM25 справляется лучше, чем векторный. Если запрос семантический («что написано про установку») — попробуйте точную формулировку из документа.
+
+**`python -m agent` не работает, `python -m src.agent` работает**
+
+Не выполнен `pip install -e .`. Выполните (см. шаг 5) или используйте `python -m src.agent`.
+
+---
+
+## Известные ограничения текущей версии
+
+- **Скорость 7B на CPU.** Один вопрос по документам — 1.5–4 минуты. 3B быстрее, но путает `search_documents`/`search_notes` и иногда выдаёт пустые ответы. См. «Выбор модели».
+- **C5: hybrid search доминируется vector на семантически близких запросах.** «Как установить агента?» → «Как понять, что агент…», а не «Установка». Причина — `mpnet`, не размер корпуса. См. раздел «Работа с документами».
+- **C6: 7B галлюцинирует в содержании при генерации по шаблону.** Заполняет секции типичными фразами («Интеграция с CRM»), не зная реального контекста проекта. Обход — уточнять конкретику в задаче.
+- **C7: 7B возвращает 2 `tool_calls`, используется первый.** Второй теряется. Для текущих задач не блокер.
+- **Галлюцинации на неполных запросах.** На «Запиши заметку в файл» без содержания модель может придумать заголовок. Промпт `save_note` просит уточнения, но на 7B галлюцинация не устранена полностью.
+- **RAG работает только на Markdown, TXT, PDF.** DOCX, HTML, EPUB — в планах.
+- **Скан-PDF не извлекается.** PDF без текстового слоя (сканы) пропускается; нужен OCR (отдельный шаг).
+- **Один инструмент за шаг.** Для двух действий — два запроса.
+- **Индекс RAG не инкрементальный.** Любое изменение корпуса — `python -m agent index --reset`.
+- **`ask` отвечает из pretrained-знаний, может ошибаться.** 7B на общих вопросах не эталон (например, путает литературные направления). Для точных фактов — 13B+ или облачная модель.
 
 ---
 
 ## Лицензия и приватность
 
 Проект работает локально. Никакие данные не отправляются в интернет. Модель, документы и логи остаются на вашем компьютере.
+
+PyMuPDF (`pymupdf`) распространяется под AGPL. Для pet-проекта и локального использования это не проблема; для коммерческого распространения — нужна коммерческая лицензия Artifex или замена на `pypdf` (MIT).
