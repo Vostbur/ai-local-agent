@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from src.agent.app import build_orchestrator
+from src.agent.app import build_orchestrator, build_tools
 from src.agent.config import (
     AppConfig,
     LLMConfig,
@@ -13,7 +13,6 @@ from src.agent.config import (
     load_config,
 )
 from src.agent.orchestrator import Orchestrator
-from src.agent.registry import ToolRegistry
 
 
 def _make_config() -> AppConfig:
@@ -28,13 +27,12 @@ def _make_config() -> AppConfig:
             notes_dir=Path("data/notes"),
             inbox_dir=Path("data/inbox"),
             photos_dir=Path("data/photos"),
-            logs_dir=Path("logs"),
-            index_dir=Path("data/index"),
             documents_dir=Path("data/documents"),
+            logs_dir=Path("logs"),
+            generated_dir=Path("data/generated"),
+            index_dir=Path("data/index"),
         ),
-        safety=SafetyConfig(
-            confirm_file_operations=True,
-        ),
+        safety=SafetyConfig(confirm_file_operations=True),
         rag=RAGConfig(),
     )
 
@@ -127,7 +125,11 @@ def test_build_orchestrator_registers_read_and_write_document():
 def test_tool_context_has_output_dir_for_write_document():
     config = _make_config()
     orch = build_orchestrator(config, logging.getLogger("test"))
-    assert orch.tool_context["write_document"]["output_dir"] == config.paths.generated_dir
+    assert "write_document" in orch.tool_context
+    assert (
+        orch.tool_context["write_document"]["output_dir"]
+        == config.paths.generated_dir
+    )
     assert "read_document" not in orch.tool_context
 
 
@@ -136,20 +138,36 @@ def test_tool_definition_context_flags():
     from src.agent.tools.save_note import SAVE_NOTE_TOOL
     from src.agent.tools.read_notes import READ_NOTES_TOOL
     from src.agent.tools.search_notes import SEARCH_NOTES_TOOL
-    from src.agent.tools.search_documents import SEARCH_DOCUMENTS_TOOL
+    from src.agent.tools.search_documents import make_search_documents_tool
     from src.agent.tools.read_document import READ_DOCUMENT_TOOL
     from src.agent.tools.write_document import WRITE_DOCUMENT_TOOL
 
-    # Три инструмента заметок получают notes_dir
+    config = _make_config()
+    search_documents_tool = make_search_documents_tool(config)
+
     assert SAVE_NOTE_TOOL.needs_notes_dir is True
     assert READ_NOTES_TOOL.needs_notes_dir is True
     assert SEARCH_NOTES_TOOL.needs_notes_dir is True
 
-    # write_document получает output_dir
     assert WRITE_DOCUMENT_TOOL.needs_output_dir is True
 
-    # read_document и search_documents — без tool_context
     assert READ_DOCUMENT_TOOL.needs_notes_dir is False
     assert READ_DOCUMENT_TOOL.needs_output_dir is False
-    assert SEARCH_DOCUMENTS_TOOL.needs_notes_dir is False
-    assert SEARCH_DOCUMENTS_TOOL.needs_output_dir is False
+    assert search_documents_tool.needs_notes_dir is False
+    assert search_documents_tool.needs_output_dir is False
+
+
+def test_build_tools_returns_six_tools():
+    """build_tools возвращает все шесть инструментов (T34)."""
+    config = _make_config()
+    tools = build_tools(config)
+    names = {t.name for t in tools}
+
+    assert names == {
+        "save_note",
+        "read_notes",
+        "search_notes",
+        "search_documents",
+        "read_document",
+        "write_document",
+    }

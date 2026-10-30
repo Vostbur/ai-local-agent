@@ -1,107 +1,159 @@
-"""Tests for the search_documents tool."""
-
-from __future__ import annotations
+"""Tests for search_documents tool (factory-based)."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from src.agent.tools.search_documents import (
-    SEARCH_DOCUMENTS_TOOL,
-    _reset_rag_service,
-    search_documents,
+from src.agent.config import (
+    AppConfig,
+    LLMConfig,
+    PathsConfig,
+    RAGConfig,
+    SafetyConfig,
 )
 from src.agent.rag.chunker import Chunk
+from src.agent.tools.search_documents import make_search_documents_tool
 
 
-class TestSearchDocumentsUsesHybrid:
-    """Проверка, что search_documents вызывает store.search_hybrid."""
+def _make_config(tmp_path: Path) -> AppConfig:
+    return AppConfig(
+        llm=LLMConfig(model="test-model"),
+        paths=PathsConfig(
+            data_dir=tmp_path / "data",
+            notes_dir=tmp_path / "data" / "notes",
+            inbox_dir=tmp_path / "data" / "inbox",
+            photos_dir=tmp_path / "data" / "photos",
+            documents_dir=tmp_path / "data" / "documents",
+            logs_dir=tmp_path / "logs",
+            generated_dir=tmp_path / "data" / "generated",
+            index_dir=tmp_path / "data" / "index",
+        ),
+        safety=SafetyConfig(),
+        rag=RAGConfig(),
+    )
 
-    @pytest.fixture
-    def mock_rag_service(self, monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
-        """Замокать _get_rag_service с моковыми store и embedder."""
-        mock_store = MagicMock()
-        mock_embedder = MagicMock()
 
-        mock_store.search_hybrid.return_value = [
+@pytest.fixture()
+def patched_rag(monkeypatch):
+    """Подменить VectorStore.load и Embedder: не грузить модель."""
+    mock_store = MagicMock()
+    mock_store.__len__ = MagicMock(return_value=3)
+    mock_store.search_hybrid = MagicMock(
+        return_value=[
             (
-                Chunk(text="результат 1", path=Path("doc1.md"), section="Раздел", chunk_index=0),
-                0.95,
-            ),
-            (
-                Chunk(text="результат 2", path=Path("doc2.md"), section="Раздел", chunk_index=1),
-                0.80,
+                Chunk(
+                    text="some text",
+                    path=Path("a.md"),
+                    section="Intro",
+                    chunk_index=0,
+                ),
+                0.82,
             ),
         ]
-        mock_embedder.embed_one.return_value = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    )
 
-        def fake_get_rag_service():
-            return (mock_store, mock_embedder)
+    mock_embedder = MagicMock()
+    mock_embedder.embed_one = MagicMock(
+        return_value=np.zeros(384, dtype=np.float32)
+    )
 
+    monkeypatch.setattr(
+        "src.agent.tools.search_documents.VectorStore.load",
+        MagicMock(return_value=mock_store),
+    )
+    monkeypatch.setattr(
+        "src.agent.tools.search_documents.Embedder",
+        MagicMock(return_value=mock_embedder),
+    )
+    return mock_store, mock_embedder
+
+
+class TestSearchDocumentsTool:
+    def test_returns_list_of_dicts(self, tmp_path, patched_rag):
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        result = tool.func("query")
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert set(result[0].keys()) == {"path", "section", "text", "score"}
+
+    def test_passes_top_k_to_store(self, tmp_path, patched_rag):
+        mock_store, _ = patched_rag
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        tool.func("query", top_k=3)
+
+        assert mock_store.search_hybrid.call_args.kwargs["top_k"] == 3
+
+    def test_calls_embedder_with_query(self, tmp_path, patched_rag):
+        _, mock_embedder = patched_rag
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        tool.func("test query")
+
+        mock_embedder.embed_one.assert_called_once_with("test query")
+
+    def test_empty_query_returns_empty_no_load(
+        self, tmp_path, monkeypatch
+    ):
+        """Пустой query → [] без загрузки store/embedder."""
+        load_mock = MagicMock()
         monkeypatch.setattr(
-            "src.agent.tools.search_documents._get_rag_service",
-            fake_get_rag_service,
+            "src.agent.tools.search_documents.VectorStore.load", load_mock
         )
-        return mock_store, mock_embedder
 
-    def test_search_documents_uses_hybrid(
-        self,
-        mock_rag_service: tuple[MagicMock, MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """search_documents вызывает store.search_hybrid, а не store.search."""
-        mock_store, mock_embedder = mock_rag_service
-
-        result = search_documents("тестовый запрос", top_k=5)
-
-        # search_hybrid вызван с query_text и query_vec
-        mock_store.search_hybrid.assert_called_once()
-        call_args = mock_store.search_hybrid.call_args
-        assert call_args[0][0] == "тестовый запрос"  # query_text
-        assert isinstance(call_args[0][1], np.ndarray)  # query_vec
-
-        # search НЕ должен вызываться напрямую
-        mock_store.search.assert_not_called()
-
-        # Результат содержит ожидаемые поля
-        assert len(result) == 2
-        assert result[0]["text"] == "результат 1"
-        assert result[0]["score"] == 0.95
-        assert result[1]["section"] == "Раздел"
-
-    def test_search_documents_empty_query_returns_empty(
-        self,
-        mock_rag_service: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """Пустой query → [] без вызова store."""
-        mock_store, _ = mock_rag_service
-
-        result = search_documents("", top_k=5)
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        result = tool.func("")
 
         assert result == []
-        mock_store.search_hybrid.assert_not_called()
+        load_mock.assert_not_called()
 
-    def test_search_documents_passes_top_k(
-        self,
-        mock_rag_service: tuple[MagicMock, MagicMock],
-    ) -> None:
-        """top_k передаётся в store.search_hybrid."""
-        mock_store, _ = mock_rag_service
+    def test_lazy_load_only_once(self, tmp_path, monkeypatch):
+        """Store загружается только при первом непустом вызове, потом кэш."""
+        load_mock = MagicMock(
+            return_value=MagicMock(
+                search_hybrid=MagicMock(return_value=[]),
+                __len__=MagicMock(return_value=0),
+            )
+        )
+        monkeypatch.setattr(
+            "src.agent.tools.search_documents.VectorStore.load", load_mock
+        )
+        monkeypatch.setattr(
+            "src.agent.tools.search_documents.Embedder",
+            MagicMock(
+                return_value=MagicMock(
+                    embed_one=MagicMock(return_value=np.zeros(384)),
+                )
+            ),
+        )
 
-        search_documents("запрос", top_k=3)
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        assert load_mock.call_count == 0
 
-        mock_store.search_hybrid.assert_called_once()
-        call_args = mock_store.search_hybrid.call_args
-        assert call_args[1]["top_k"] == 3  # keyword argument
+        tool.func("query")
+        assert load_mock.call_count == 1
 
-def test_description_mentions_documents_and_not_notes():
-    desc = SEARCH_DOCUMENTS_TOOL.description
+        tool.func("another")
+        assert load_mock.call_count == 1
 
-    assert "DOCUMENTS" in desc
-    assert "README" in desc
-    assert "NOT personal notes" in desc
-    assert "search_notes" in desc
-    assert "установка" in desc
-    assert "версия Python" in desc
+    def test_description_mentions_documents_and_not_notes(self, tmp_path):
+        tool = make_search_documents_tool(_make_config(tmp_path))
+        desc = tool.description
+
+        assert "DOCUMENTS" in desc
+        assert "README" in desc
+        assert "NOT personal notes" in desc
+        assert "search_notes" in desc
+        assert "установка" in desc
+        assert "версия Python" in desc
+
+    def test_factory_produces_independent_tools(self, tmp_path):
+        """Две фабрики — два независимых контекста (нет глобального state)."""
+        cfg = _make_config(tmp_path)
+        tool1 = make_search_documents_tool(cfg)
+        tool2 = make_search_documents_tool(cfg)
+
+        assert tool1 is not tool2
+        assert tool1.func is not tool2.func
+        assert tool1.name == tool2.name == "search_documents"

@@ -3,100 +3,123 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from src.agent.config import load_config
+from src.agent.config import AppConfig
 from src.agent.registry import ToolDefinition
-from src.agent.rag.chunker import Chunk
 from src.agent.rag.embedder import Embedder
 from src.agent.rag.store import VectorStore
 
 logger = logging.getLogger("agent")
 
-_rag_service: tuple[VectorStore, Embedder] | None = None
 
+class _RagContext:
+    """Лениво загружаемый контекст RAG: VectorStore + Embedder.
 
-def _get_rag_service() -> tuple[VectorStore, Embedder]:
-    """Ленивая загрузка индекса и модели эмбеддингов.
-
-    Один раз на процесс: при первом вызове читает config, грузит
-    VectorStore из config.paths.index_dir и создаёт Embedder.
+    Создаётся фабрикой `make_search_documents_tool(config)` и живёт
+    в замыкании возвращаемой функции. Никакого глобального состояния —
+    два вызова фабрики дают два независимых контекста.
     """
-    global _rag_service
-    if _rag_service is None:
-        config = load_config()
-        store = VectorStore.load(config.paths.index_dir)
-        embedder = Embedder(config.rag.embedding_model)
-        logger.info(
-            "RAG service loaded: %d chunks, model=%s",
-            len(store),
-            config.rag.embedding_model,
-        )
-        _rag_service = (store, embedder)
-    return _rag_service
+
+    def __init__(self, index_dir: Path, embedding_model: str) -> None:
+        self._index_dir = index_dir
+        self._embedding_model = embedding_model
+        self._store: VectorStore | None = None
+        self._embedder: Embedder | None = None
+
+    def _ensure_loaded(self) -> None:
+        if self._store is None:
+            self._store = VectorStore.load(self._index_dir)
+            logger.info(
+                "RAG store loaded: %d chunks from %s",
+                len(self._store),
+                self._index_dir,
+            )
+        if self._embedder is None:
+            self._embedder = Embedder(self._embedding_model)
+
+    @property
+    def store(self) -> VectorStore:
+        self._ensure_loaded()
+        assert self._store is not None
+        return self._store
+
+    @property
+    def embedder(self) -> Embedder:
+        self._ensure_loaded()
+        assert self._embedder is not None
+        return self._embedder
 
 
-def _reset_rag_service() -> None:
-    """Сбросить закэшированный сервис. Для тестов."""
-    global _rag_service
-    _rag_service = None
-
-
-def search_documents(query: str, top_k: int = 5) -> list[dict]:
-    """Найти семантически релевантные фрагменты в корпусе документов.
+def make_search_documents_tool(config: AppConfig) -> ToolDefinition:
+    """Фабрика search_documents с контекстом из config (без глобального состояния).
 
     Args:
-        query: Вопрос или ключевые слова на естественном языке.
-        top_k: Максимальное число фрагментов.
+        config: Конфигурация приложения. Используются
+            `paths.index_dir` и `rag.embedding_model`.
 
     Returns:
-        Список словарей: ``path``, ``section``, ``text``, ``score``.
+        ToolDefinition с именем `search_documents` и функцией,
+        захватившей `_RagContext` в замыкании.
     """
-    if not query.strip():
-        return []
+    ctx = _RagContext(config.paths.index_dir, config.rag.embedding_model)
 
-    store, embedder = _get_rag_service()
-    query_vec = embedder.embed_one(query)
-    results = store.search_hybrid(query, query_vec, top_k=top_k)
+    def search_documents(query: str, top_k: int = 5) -> list[dict]:
+        """Найти семантически релевантные фрагменты в корпусе документов.
 
-    return [
-        {
-            "path": str(chunk.path),
-            "section": chunk.section,
-            "text": chunk.text,
-            "score": round(float(score), 4),
-        }
-        for chunk, score in results
-    ]
+        Args:
+            query: Вопрос или ключевые слова на естественном языке.
+            top_k: Максимальное число фрагментов.
 
+        Returns:
+            Список словарей: ``path``, ``section``, ``text``, ``score``.
+        """
+        if not query.strip():
+            return []
 
-SEARCH_DOCUMENTS_TOOL: ToolDefinition = ToolDefinition(
-    name="search_documents",
-    description=(
-        "Search the user's DOCUMENTS (README, articles, project files, "
-        "knowledge base) — NOT personal notes. ALWAYS use when the user "
-        "asks about: требования, установка, запуск, что умеет проект, "
-        "возможности, лицензия, статьи, документация, README, исходный код, "
-        "версия Python, файлы проекта. Returns matching fragments with "
-        "source path, section and relevance score. "
-        "For personal notes, use search_notes."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": (
-                    "Natural language question or keywords. "
-                    "Works semantically, not by exact substring."
-                ),
+        query_vec = ctx.embedder.embed_one(query)
+        results = ctx.store.search_hybrid(query, query_vec, top_k=top_k)
+
+        return [
+            {
+                "path": str(chunk.path),
+                "section": chunk.section,
+                "text": chunk.text,
+                "score": round(float(score), 4),
+            }
+            for chunk, score in results
+        ]
+
+    return ToolDefinition(
+        name="search_documents",
+        description=(
+            "Search the user's DOCUMENTS (README, articles, project files, "
+            "knowledge base) — NOT personal notes. ALWAYS use when the user "
+            "asks about: требования, установка, запуск, что умеет проект, "
+            "возможности, лицензия, статьи, документация, README, исходный код, "
+            "версия Python, файлы проекта. Returns matching fragments with "
+            "source path, section and relevance score. "
+            "For personal notes, use search_notes."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Natural language question or keywords. "
+                        "Works semantically, not by exact substring."
+                    ),
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": (
+                        "Maximum number of fragments to return. Default 5."
+                    ),
+                    "default": 5,
+                },
             },
-            "top_k": {
-                "type": "integer",
-                "description": "Maximum number of fragments to return. Default 5.",
-                "default": 5,
-            },
+            "required": ["query"],
         },
-        "required": ["query"],
-    },
-    func=search_documents,
-)
+        func=search_documents,
+    )

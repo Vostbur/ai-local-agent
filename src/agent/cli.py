@@ -1,8 +1,4 @@
-"""Функции подкоманд для `python -m src.agent`.
-
-Логика вынесена из `scripts/*.py` без изменений. U4 (AgentService)
-заменит это на сервисный слой с AsyncIterator[Event].
-"""
+"""Функции подкоманд для `python -m src.agent`."""
 
 from __future__ import annotations
 
@@ -14,7 +10,6 @@ from src.agent.app import build_orchestrator
 from src.agent.config import AppConfig
 from src.agent.orchestrator import MaxStepsExceeded
 from src.agent.rag.build import build_index
-from src.agent.tools.search_documents import search_documents
 
 
 def _run_one(orchestrator, goal: str, logger: logging.Logger) -> None:
@@ -117,8 +112,12 @@ def search_cmd(
     config: AppConfig,
 ) -> None:
     """`python -m src.agent search "запрос"` — отладка retrieval без LLM."""
+    from src.agent.tools.search_documents import make_search_documents_tool
+
+    tool = make_search_documents_tool(config)
+
     try:
-        results = search_documents(query, top_k=top_k)
+        results = tool.func(query, top_k=top_k)
     except FileNotFoundError as exc:
         print(f"Ошибка: {exc}")
         print("Соберите индекс: python -m src.agent index")
@@ -139,6 +138,7 @@ def search_cmd(
         print(f"    {text}")
         print()
 
+
 def ask_once(
     goal: str, config: AppConfig, logger: logging.Logger
 ) -> None:
@@ -148,7 +148,7 @@ def ask_once(
     llm = OllamaLLM(
         model=config.llm.model,
         base_url=config.llm.base_url,
-        tools=[],  # критично: без инструментов
+        tools=[],
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
     )
@@ -233,4 +233,4 @@ def ask_interactive(
             print("Выход.")
             return
 
-        print()  # разделитель между вопросами и ответами
+        print()
