@@ -407,3 +407,8 @@ def test_system_prompt_has_few_shot_examples():
     assert "запуск" in SYSTEM_PROMPT
     assert "лицензия" in SYSTEM_PROMPT
     assert "статья" in SYSTEM_PROMPT
+
+
+def test_system_prompt_mentions_document_tools():
+    assert "read_document" in SYSTEM_PROMPT
+    assert "write_document" in SYSTEM_PROMPT

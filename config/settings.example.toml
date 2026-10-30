@@ -19,6 +19,8 @@ photos_dir = "data/photos"
 documents_dir = "data/documents"
 # Корень векторного индекса для RAG. Относительный путь — от корня проекта.
 index_dir = "data/index"
+# Директория для документов, созданных агентом по шаблону.
+generated_dir = "data/generated"
 
 logs_dir = "logs"
 

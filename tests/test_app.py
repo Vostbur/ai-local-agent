@@ -115,3 +115,17 @@ max_steps = 7
     assert orch.max_steps == 7
     assert orch.llm.model == "test-model-from-toml"
     assert orch.llm.base_url == "http://test-host:11434"
+
+
+def test_build_orchestrator_registers_read_and_write_document():
+    config = _make_config()
+    orch = build_orchestrator(config, logging.getLogger("test"))
+    assert orch.registry.get("read_document") is not None
+    assert orch.registry.get("write_document") is not None
+
+
+def test_tool_context_has_output_dir_for_write_document():
+    config = _make_config()
+    orch = build_orchestrator(config, logging.getLogger("test"))
+    assert orch.tool_context["write_document"]["output_dir"] == config.paths.generated_dir
+    assert "read_document" not in orch.tool_context

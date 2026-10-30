@@ -65,6 +65,7 @@ class PathsConfig:
         memory: Путь к директории памяти.
         tools: Путь к директории инструментов.
         index_dir: Директория векторного индекса RAG.
+        generated_dir: Директория для документов, созданных агентом по шаблону.
     """
 
     data_dir: Path = Path("data")
@@ -76,6 +77,7 @@ class PathsConfig:
     memory: Path = Path("memory")
     tools: Path = Path("tools")
     index_dir: Path = Path("data/index")
+    generated_dir: Path = Path("data/generated")
 
 
 @dataclass
@@ -156,6 +158,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         memory=_resolve_path(paths_raw.get("memory", "memory")),
         tools=_resolve_path(paths_raw.get("tools", "tools")),
         index_dir=_resolve_path(paths_raw.get("index_dir", "data/index")),
+        generated_dir=_resolve_path(paths_raw.get("generated_dir", "data/generated")),
     )
 
     safety_raw = raw.get("safety", {})

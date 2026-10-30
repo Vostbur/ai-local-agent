@@ -267,3 +267,38 @@ model = "m"
         assert result.rag.chunk_size == defaults.chunk_size
         assert result.rag.chunk_overlap == defaults.chunk_overlap
         assert result.rag.top_k == defaults.top_k
+
+
+def test_generated_dir_from_toml(tmp_path: Path) -> None:
+    """[paths] generated_dir = "custom/gen" → _PROJECT_ROOT / "custom" / "gen"."""
+    toml_file = tmp_path / "settings.toml"
+    toml_file.write_text(
+        """\
+[llm]
+model = "m"
+
+[paths]
+generated_dir = "custom/gen"
+""",
+        encoding="utf-8",
+    )
+
+    result = load_config(toml_file)
+
+    assert result.paths.generated_dir == _PROJECT_ROOT / "custom" / "gen"
+
+
+def test_generated_dir_default(tmp_path: Path) -> None:
+    """Без [paths] → _PROJECT_ROOT / "data" / "generated"."""
+    toml_file = tmp_path / "settings.toml"
+    toml_file.write_text(
+        """\
+[llm]
+model = "m"
+""",
+        encoding="utf-8",
+    )
+
+    result = load_config(toml_file)
+
+    assert result.paths.generated_dir == _PROJECT_ROOT / "data" / "generated"

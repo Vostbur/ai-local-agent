@@ -10,15 +10,20 @@ from src.agent.tools.save_note import SAVE_NOTE_TOOL
 from src.agent.tools.read_notes import READ_NOTES_TOOL
 from src.agent.tools.search_notes import SEARCH_NOTES_TOOL
 from src.agent.tools.search_documents import SEARCH_DOCUMENTS_TOOL
+from src.agent.tools.read_document import READ_DOCUMENT_TOOL
+from src.agent.tools.write_document import WRITE_DOCUMENT_TOOL
 
 ALL_TOOLS = [
     SAVE_NOTE_TOOL,
     READ_NOTES_TOOL,
     SEARCH_NOTES_TOOL,
     SEARCH_DOCUMENTS_TOOL,
+    READ_DOCUMENT_TOOL,
+    WRITE_DOCUMENT_TOOL,
 ]
 
 TOOLS_WITH_NOTES_DIR = ("save_note", "read_notes", "search_notes")
+TOOLS_WITH_OUTPUT_DIR = ("write_document",)
 
 
 def build_orchestrator(
@@ -38,10 +43,11 @@ def build_orchestrator(
         max_tokens=config.llm.max_tokens,
     )
 
-    tool_context = {
-        name: {"notes_dir": config.paths.notes_dir}
-        for name in TOOLS_WITH_NOTES_DIR
-    }
+    tool_context: dict[str, dict] = {}
+    for name in TOOLS_WITH_NOTES_DIR:
+        tool_context[name] = {"notes_dir": config.paths.notes_dir}
+    for name in TOOLS_WITH_OUTPUT_DIR:
+        tool_context[name] = {"output_dir": config.paths.generated_dir}
 
     return Orchestrator(
         llm=llm,
