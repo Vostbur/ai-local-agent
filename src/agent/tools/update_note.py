@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import load_note, resolve_note_path
+from src.agent.tools._search import ensure_note_file, load_note, resolve_note_path
 
 
 def update_note(
@@ -39,8 +39,7 @@ def update_note(
         raise ValueError("title must not be empty")
 
     candidate = resolve_note_path(path, notes_dir)
-    if not candidate.is_file():
-        raise FileNotFoundError(f"Note not found: {path!r}")
+    ensure_note_file(candidate, path)
     if candidate.suffix != ".md":
         raise ValueError(f"Not a Markdown note: {path!r}")
 

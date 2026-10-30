@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import resolve_note_path, validate_category
+from src.agent.tools._search import ensure_note_file, resolve_note_path, validate_category
 
 
 def move_note(path: str, category: str | None, notes_dir: Path) -> dict:
@@ -28,8 +28,7 @@ def move_note(path: str, category: str | None, notes_dir: Path) -> dict:
         FileNotFoundError: Если заметка не найдена.
     """
     candidate = resolve_note_path(path, notes_dir)
-    if not candidate.is_file():
-        raise FileNotFoundError(f"Note not found: {path!r}")
+    ensure_note_file(candidate, path)
 
     category_clean = validate_category(category)
     target_dir = notes_dir / category_clean if category_clean else notes_dir

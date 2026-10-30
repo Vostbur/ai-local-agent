@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import resolve_note_path
+from src.agent.tools._search import ensure_note_file, resolve_note_path
 
 
 def delete_note(path: str, notes_dir: Path, trash_dir: Path) -> dict:
@@ -29,8 +29,7 @@ def delete_note(path: str, notes_dir: Path, trash_dir: Path) -> dict:
         FileNotFoundError: Если заметка не найдена.
     """
     candidate = resolve_note_path(path, notes_dir)
-    if not candidate.is_file():
-        raise FileNotFoundError(f"Note not found: {path!r}")
+    ensure_note_file(candidate, path)
 
     rel = candidate.relative_to(notes_dir)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

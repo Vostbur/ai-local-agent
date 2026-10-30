@@ -193,3 +193,23 @@ def resolve_note_path(path: str, notes_dir: Path) -> Path:
     if not is_safe_path(candidate, notes_dir):
         raise ValueError(f"Path is outside the notes directory: {path!r}")
     return candidate
+
+def ensure_note_file(candidate: Path, path_repr: str) -> None:
+    """Проверить, что заметка существует; иначе поднять ошибку с подсказкой.
+
+    Сообщение об ошибке явно говорит модели, что ``path`` — это путь к файлу,
+    а не заголовок, и что путь нужно сначала получить через ``list_notes`` /
+    ``read_notes``. Текст ошибки попадает в ``tool_result`` со статусом
+    ``ERROR``, и оркестратор передаёт его модели — это позволяет модели
+    восстановиться на следующем шаге вместо завершения задачи.
+
+    Raises:
+        FileNotFoundError: Если файл не существует.
+    """
+    if not candidate.is_file():
+        raise FileNotFoundError(
+            f"Note not found: {path_repr!r}. The 'path' argument must be a "
+            f"file path relative to data/notes/ (e.g. 'тесты/тест_b1.md'), "
+            f"NOT the note title. If you only know the title, call list_notes "
+            f"or read_notes first to get the path, then retry."
+        )

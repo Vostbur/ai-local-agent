@@ -209,3 +209,36 @@ class TestListCategories:
 
     def test_missing_dir(self, tmp_path: Path) -> None:
         assert list_categories(tmp_path / "нет") == []
+
+
+class TestErrorMessageGuidesToSearch:
+    """Ошибка 'заметка не найдена' должна подсказывать модели, что делать.
+
+    Страховка от сценария smoke 2026-10-30: модель передала заголовок
+    'Тест B1' вместо пути и после невнятной ошибки завершила задачу,
+    не попробовав сначала найти путь.
+    """
+
+    def test_update_note_error_mentions_search_tools(self, notes_dir: Path) -> None:
+        with pytest.raises(FileNotFoundError) as exc:
+            update_note("Тест B1", notes_dir, title="X")
+        msg = str(exc.value)
+        assert "list_notes" in msg
+        assert "read_notes" in msg
+        assert "NOT the note title" in msg
+
+    def test_move_note_error_mentions_search_tools(self, notes_dir: Path) -> None:
+        with pytest.raises(FileNotFoundError) as exc:
+            move_note("Тест B1", "архив", notes_dir)
+        msg = str(exc.value)
+        assert "list_notes" in msg
+        assert "read_notes" in msg
+
+    def test_delete_note_error_mentions_search_tools(
+        self, notes_dir: Path, trash_dir: Path
+    ) -> None:
+        with pytest.raises(FileNotFoundError) as exc:
+            delete_note("Тест B1", notes_dir, trash_dir)
+        msg = str(exc.value)
+        assert "list_notes" in msg
+        assert "read_notes" in msg
