@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Local Agent</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: #f7f7f8; color: #1a1a1a; }
+  header { background: #1a1a1a; color: #fff; padding: 12px 24px; font-size: 16px; font-weight: 600; }
+  header small { font-weight: 400; opacity: 0.7; margin-left: 8px; font-size: 13px; }
+  nav { display: flex; gap: 4px; padding: 8px 24px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+  nav button { background: none; border: none; padding: 8px 16px; cursor: pointer; font-size: 14px; border-radius: 6px; color: #444; }
+  nav button:hover:not(:disabled) { background: #f0f0f0; }
+  nav button.active { background: #1a1a1a; color: #fff; }
+  nav button:disabled { color: #999; cursor: not-allowed; }
+  main { max-width: 900px; margin: 24px auto; padding: 0 24px; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+  .hint { color: #666; font-size: 13px; margin: 0 0 12px; }
+  .hint code { background: #eaeaea; padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+  textarea { width: 100%; min-height: 80px; padding: 10px; font-family: inherit; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; }
+  .actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  button.primary { background: #1a1a1a; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button.primary:disabled { opacity: 0.5; cursor: wait; }
+  button.secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button.secondary:disabled { opacity: 0.5; cursor: wait; }
+  pre.log { background: #1a1a1a; color: #e5e5e5; padding: 12px; border-radius: 6px; min-height: 200px; max-height: 500px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
+  .status { font-size: 13px; color: #666; margin-top: 8px; }
+  .status.ok { color: #2a7d2a; }
+  .status.err { color: #b33a3a; }
+</style>
+</head>
+<body>
+<header>AI Local Agent <small>локальный веб-интерфейс</small></header>
+<nav>
+  <button data-tab="agent" class="active">Агент</button>
+  <button data-tab="docs">Документы</button>
+  <button data-tab="chat">Чат (без инструментов)</button>
+  <button data-tab="photos" disabled title="В разработке (шаг 8)">Фото</button>
+</nav>
+<main>
+  <section id="tab-agent" class="tab active">
+    <p class="hint">Задайте цель агенту. Он может сохранять заметки, искать по документам, читать и создавать файлы. Примеры: <code>Сохрани заметку 'Список покупок' с текстом 'Молоко'</code>, <code>Что в документах про OSPF?</code>.</p>
+    <textarea id="agent-goal" placeholder="Сохрани заметку..."></textarea>
+    <div class="actions">
+      <button class="primary" id="agent-send">Спросить агента</button>
+    </div>
+    <pre class="log" id="agent-log"></pre>
+  </section>
+  <section id="tab-docs" class="tab">
+    <p class="hint">Поиск по корпусу документов (Markdown, TXT, PDF) и переиндексация. Переиндексация занимает 2–5 минут на CPU.</p>
+    <textarea id="docs-goal" placeholder="Что в документах про..."></textarea>
+    <div class="actions">
+      <button class="primary" id="docs-send">Найти</button>
+      <button class="secondary" id="index-btn">Переиндексировать</button>
+    </div>
+    <div class="status" id="index-status"></div>
+    <pre class="log" id="docs-log"></pre>
+  </section>
+  <section id="tab-chat" class="tab">
+    <p class="hint">Прямой чат с локальной моделью — без инструментов, без SYSTEM_PROMPT. Ответы из pretrained-знаний (могут ошибаться). Для вопросов про проект используйте вкладку «Агент».</p>
+    <textarea id="chat-goal" placeholder="Кто такой Достоевский?"></textarea>
+    <div class="actions">
+      <button class="primary" id="chat-send">Спросить</button>
+    </div>
+    <pre class="log" id="chat-log"></pre>
+  </section>
+  <section id="tab-photos" class="tab">
+    <p>Раздел в разработке. См. <code>TASKS.md</code>, шаг 8 — сортировка фотографий по содержимому (<code>analyze_image</code>, <code>move_file</code>).</p>
+  </section>
+</main>
+<script>
+(function () {
+  // Переключение вкладок
+  const navButtons = document.querySelectorAll('nav button');
+  navButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      navButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  function appendLog(preEl, text) {
+    preEl.textContent += text;
+    preEl.scrollTop = preEl.scrollHeight;
+  }
+
+  function formatEvent(data) {
+    if (data.type === 'step') {
+      if (data.event_type === 'llm_call') {
+        return `[шаг ${data.step}] модель думает...\n`;
+      }
+      if (data.event_type === 'tool_result') {
+        let line = `[шаг ${data.step}] ${data.tool_name} → ${data.status}`;
+        if (data.count != null) line += `, ${data.count} элементов`;
+        return line + '\n';
+      }
+      if (data.event_type === 'final') {
+        return data.status === 'empty' ? '[шаг] пустой ответ\n' : '';
+      }
+      return '';
+    }
+    if (data.type === 'final') {
+      if (data.success) {
+        return `\nГотово: ${data.final_answer}\nШагов: ${data.steps_used}\n`;
+      }
+      return `\nНе удалось: ${data.error || 'unknown'}\nШагов: ${data.steps_used}\n`;
+    }
+    return '';
+  }
+
+  async function runTask(endpoint, goal, logEl, button) {
+    logEl.textContent = '';
+    button.disabled = true;
+    try {
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({goal: goal}),
+      });
+      if (!resp.ok) {
+        appendLog(logEl, `HTTP ${resp.status}: ${await resp.text()}\n`);
+        return;
+      }
+      const {task_id} = await resp.json();
+      appendLog(logEl, `[...] выполняется (task ${task_id.slice(0, 8)}...)\n`);
+
+      await new Promise((resolve) => {
+        const es = new EventSource(`/stream/${task_id}`);
+        es.addEventListener('step', (e) => {
+          appendLog(logEl, formatEvent(JSON.parse(e.data)));
+        });
+        es.addEventListener('final', (e) => {
+          appendLog(logEl, formatEvent(JSON.parse(e.data)));
+          es.close();
+          resolve();
+        });
+        es.onerror = () => {
+          appendLog(logEl, '[!] соединение с сервером прервано\n');
+          es.close();
+          resolve();
+        };
+      });
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById('agent-send').addEventListener('click', () => {
+    const goal = document.getElementById('agent-goal').value.trim();
+    if (!goal) return;
+    runTask('/ask', goal,
+      document.getElementById('agent-log'),
+      document.getElementById('agent-send'));
+  });
+
+  document.getElementById('docs-send').addEventListener('click', () => {
+    const goal = document.getElementById('docs-goal').value.trim();
+    if (!goal) return;
+    runTask('/ask', goal,
+      document.getElementById('docs-log'),
+      document.getElementById('docs-send'));
+  });
+
+  document.getElementById('chat-send').addEventListener('click', () => {
+    const goal = document.getElementById('chat-goal').value.trim();
+    if (!goal) return;
+    runTask('/ask-plain', goal,
+      document.getElementById('chat-log'),
+      document.getElementById('chat-send'));
+  });
+
+  document.getElementById('index-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('index-btn');
+    const status = document.getElementById('index-status');
+    btn.disabled = true;
+    status.className = 'status';
+    status.textContent = 'Идёт индексация... (2–5 минут на CPU)';
+    try {
+      const resp = await fetch('/index', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reset: true, documents: null}),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        status.className = 'status ok';
+        status.textContent = `Готово: ${data.chunks} чанков`;
+      } else {
+        status.className = 'status err';
+        status.textContent = `Ошибка: ${data.error}`;
+      }
+    } catch (exc) {
+      status.className = 'status err';
+      status.textContent = `Ошибка сети: ${exc}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

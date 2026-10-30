@@ -1,4 +1,4 @@
-"""Единая точка входа: `python -m src.agent <command>`."""
+"""Единая точка входа: `python -m agent <command>`."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="Выполнить одну задачу")
     p_run.add_argument("goal", help="Цель агента (текст)")
 
+    sub.add_parser("chat", help="Интерактивный режим")
+
     p_ask = sub.add_parser(
         "ask",
         help="Спросить модель без инструментов (как 'ollama run')",
@@ -34,8 +36,6 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Вопрос. Если не указан — интерактивный режим",
     )
-    
-    sub.add_parser("chat", help="Интерактивный режим")
 
     p_index = sub.add_parser("index", help="Пересобрать RAG-индекс")
     p_index.add_argument(
@@ -66,6 +66,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Не обрезать текст фрагментов до 200 символов",
     )
+
+    p_web = sub.add_parser("web", help="Запустить веб-интерфейс")
+    p_web.add_argument("--host", default="127.0.0.1", help="Хост (по умолчанию 127.0.0.1)")
+    p_web.add_argument("--port", type=int, default=8000, help="Порт (по умолчанию 8000)")
 
     return parser
 
@@ -102,7 +106,7 @@ def main(argv: list[str] | None = None) -> None:
             ask_once(args.goal, config, logger)
         else:
             ask_interactive(config, logger)
-            
+
     elif args.command == "index":
         from src.agent.cli import build_index_cmd
 
@@ -123,6 +127,14 @@ def main(argv: list[str] | None = None) -> None:
             truncate=not args.no_truncate,
             config=config,
         )
+
+    elif args.command == "web":
+        from src.agent.web.app import create_app
+        import uvicorn
+
+        app = create_app(config, logger)
+        print(f"AI Local Agent web: http://{args.host}:{args.port}")
+        uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
