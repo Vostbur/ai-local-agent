@@ -637,14 +637,23 @@ def test_system_prompt_lists_crud_tools() -> None:
 def test_system_prompt_requires_path_lookup_before_crud() -> None:
     """Правило: для update/delete/move_note нужен путь, а не заголовок.
 
-    Страховка от сценария smoke 2026-10-30: модель передавала заголовок
-    'Тест B1' вместо пути и сдавалась после ошибки. Проверка на точную
-    фразу — по уроку про documentation rot.
+    Проверка на точные фразы — по уроку про documentation rot.
     """
     assert "а НЕ название заметки" in SYSTEM_PROMPT
     assert "сначала вызови" in SYSTEM_PROMPT
+    assert "НЕ угадывай путь по названию" in SYSTEM_PROMPT
 
 
+def test_system_prompt_does_not_contain_real_note_paths() -> None:
+    """В промпте не должно быть реальных путей заметок — модель их копирует.
+
+    Итог smoke 2026-10-30 (вторая итерация): модель копировала пример
+    'тесты/тест_b1.md' из SYSTEM_PROMPT вместо вызова list_notes —
+    успех был случайным (пример совпал с реальной заметкой).
+    """
+    assert "тесты/тест_b1.md" not in SYSTEM_PROMPT
+
+    
 def test_system_prompt_no_call_syntax_for_crud_tools() -> None:
     """Урок 7.3: синтаксиса вызова новых инструментов в промпте быть не должно."""
     for snippet in (
