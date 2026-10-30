@@ -158,7 +158,7 @@ def test_tool_definition_context_flags():
 
 
 def test_build_tools_returns_six_tools():
-    """build_tools возвращает все шесть инструментов (T34)."""
+    """build_tools возвращает все одиннадцать инструментов (T34)."""
     config = _make_config()
     tools = build_tools(config)
     names = {t.name for t in tools}
@@ -167,6 +167,11 @@ def test_build_tools_returns_six_tools():
         "save_note",
         "read_notes",
         "search_notes",
+        "list_notes",
+        "update_note",
+        "delete_note",
+        "move_note",
+        "list_categories",
         "search_documents",
         "read_document",
         "write_document",

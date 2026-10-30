@@ -178,3 +178,18 @@ def find_match_with_kind(
         return m.start(), m.end(), "stem"
 
     return None
+
+def resolve_note_path(path: str, notes_dir: Path) -> Path:
+    """Резолвит путь заметки и проверяет, что он внутри ``notes_dir``.
+
+    Принимает относительный путь (от ``notes_dir``) или абсолютный.
+
+    Raises:
+        ValueError: Если путь выходит за пределы ``notes_dir``.
+    """
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = notes_dir / candidate
+    if not is_safe_path(candidate, notes_dir):
+        raise ValueError(f"Path is outside the notes directory: {path!r}")
+    return candidate
