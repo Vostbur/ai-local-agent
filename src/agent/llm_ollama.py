@@ -16,7 +16,7 @@ class OllamaLLM:
         self,
         model: str = "qwen2.5-3b-agent",
         base_url: str = "http://localhost:11434",
-        timeout: int = 300,
+        timeout: int = 900,
         tools: list[ToolDefinition] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
