@@ -543,3 +543,29 @@ def test_tool_result_not_logged_in_full(caplog):
     assert result.success is True
     assert "SECRET_NOTE_TEXT" not in caplog.text
     assert "list[1]" in caplog.text
+
+
+def test_empty_final_yields_error():
+    """final с пустым content → success=False, error='empty final answer'."""
+    llm = FakeLLM([LLMResponse(type="final", content="")])
+    registry = ToolRegistry()
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("goal")
+
+    assert result.success is False
+    assert result.final_answer is None
+    assert result.error == "empty final answer"
+    assert result.steps_used == 1
+
+
+def test_whitespace_only_final_yields_error():
+    """final с пробелами/переносами → тоже empty."""
+    llm = FakeLLM([LLMResponse(type="final", content="   \n\n  ")])
+    registry = ToolRegistry()
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    result = orchestrator.run("goal")
+
+    assert result.success is False
+    assert result.error == "empty final answer"

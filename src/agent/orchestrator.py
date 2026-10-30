@@ -121,6 +121,17 @@ class Orchestrator:
             self.logger.info("step=%d type=%s", step, response.type)
 
             if response.type == "final":
+                if not response.content or not response.content.strip():
+                    self.logger.warning(
+                        "empty final answer at step %d", step
+                    )
+                    return OrchestratorResult(
+                        success=False,
+                        final_answer=None,
+                        steps_used=step,
+                        error="empty final answer",
+                        tool_results=tool_results,
+                    )
                 self.logger.info("final: %s", response.content)
                 return OrchestratorResult(
                     success=True,
