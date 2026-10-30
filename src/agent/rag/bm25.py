@@ -6,20 +6,9 @@ import math
 import re
 
 from src.agent.rag.chunker import Chunk
+from src.agent.stem import stem as _stem
 
 _TOKEN_RE = re.compile(r"[а-яёa-z0-9]+")
-
-
-def _stem(token: str) -> str:
-    """Грубый стеммер для русского: префикс 5 символов.
-
-    Сводит словоформы к одному виду («установить» и «установка» → «устан»),
-    чтобы BM25 находил лексические совпадения независимо от окончаний.
-    Короткие слова (≤5 символов) не трогаются.
-    """
-    if len(token) <= 5:
-        return token
-    return token[:5]
 
 
 def _tokenize(text: str) -> list[str]:

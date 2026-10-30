@@ -1,5 +1,3 @@
-from src.agent.tools._search import find_match, find_match_with_kind
-
 from pathlib import Path
 
 from src.agent.tools._search import (
@@ -96,3 +94,21 @@ def test_load_note_invalid_utf8_returns_none(tmp_path: Path) -> None:
     result = load_note(path)
 
     assert result is None
+
+
+def test_stem_uses_word_boundary():
+    """«документы» не матчит «недокументированный» (нет \b перед «докум»)."""
+    assert find_match("недокументированный", "документы") is None
+
+
+def test_stem_matches_shorter_word_form():
+    """«документы» находит «документ» через стем на границе слова."""
+    result = find_match("документ", "документы")
+    assert result is not None
+    assert result[0] == 0
+
+
+def test_stem_matches_word_form_at_boundary():
+    """«требования» находит «требований» через стем."""
+    result = find_match("система требований", "требования")
+    assert result is not None

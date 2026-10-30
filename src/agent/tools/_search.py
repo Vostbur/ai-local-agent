@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional, Tuple
+
+from src.agent.stem import stem
 
 logger = logging.getLogger("agent")
 
@@ -15,6 +18,18 @@ def find_match_with_kind(
     *,
     min_stem_len: int = 5,
 ) -> Optional[Tuple[int, int, str]]:
+    """Найти точное вхождение, затем — стем с границей слова.
+
+    Args:
+        text: Текст, в котором ищем.
+        query: Поисковый запрос.
+        min_stem_len: Минимальная длина запроса для стемминга. Запросы
+            короче не стеммируются (числа, аббревиатуры, короткие слова).
+
+    Returns:
+        ``(start, end, kind)``, где ``kind`` — ``"exact"`` или ``"stem"``,
+        или ``None``, если совпадения нет.
+    """
     if not text or not query.strip():
         return None
 
@@ -26,10 +41,15 @@ def find_match_with_kind(
         return (start, start + len(query_l), "exact")
 
     if len(query_l) >= min_stem_len:
-        stem = query_l[:-2]
-        if len(stem) >= min_stem_len - 1 and stem in text_l:
-            start = text_l.index(stem)
-            return (start, start + len(stem), "stem")
+        stemmed = stem(query_l)
+        if len(stemmed) >= min_stem_len - 1:
+            # \b слева: «докум» находит «документ», но не
+            # «недокументированный» (перед «д» — «е», обе буквы
+            # word chars, границы нет).
+            match = re.search(rf"\b{re.escape(stemmed)}", text_l)
+            if match:
+                start = match.start()
+                return (start, start + len(stemmed), "stem")
 
     return None
 
