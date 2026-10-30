@@ -69,3 +69,14 @@ def test_creates_output_dir(tmp_path: Path) -> None:
 
     assert Path(result["path"]).exists()
     assert nested.exists()
+
+
+def test_strips_duplicate_title_from_content(tmp_path: Path) -> None:
+    """Если content начинается с '# title', write_document не дублирует заголовок."""
+    content = "# Test\n\n## Section\n\nBody."
+    result = write_document("Test", content, tmp_path)
+
+    text = Path(result["path"]).read_text(encoding="utf-8")
+    assert text.count("# Test") == 1
+    assert "## Section" in text
+    assert "Body." in text

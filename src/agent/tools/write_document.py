@@ -19,6 +19,12 @@ def write_document(title: str, content: str, output_dir: Path) -> dict:
     Returns:
         Словарь с путём, заголовком и размером содержимого.
     """
+    stripped = content.lstrip()
+    if stripped.startswith("# "):
+        first_line, _, rest = stripped.partition("\n")
+        # Если первая строка — заголовок (не важно, совпадает с title или нет),
+        # save_note добавит '# {title}' сам. Убираем дубль.
+        content = rest.lstrip("\n")
     path = save_note(title, content, output_dir)
     return {"path": str(path), "title": title, "size_chars": len(content)}
 
