@@ -138,3 +138,99 @@ def search_cmd(
             text = text[:200] + "..."
         print(f"    {text}")
         print()
+
+def ask_once(
+    goal: str, config: AppConfig, logger: logging.Logger
+) -> None:
+    """`python -m src.agent ask "вопрос"` — прямой чат с моделью, без tools."""
+    from src.agent.llm_ollama import OllamaLLM
+
+    llm = OllamaLLM(
+        model=config.llm.model,
+        base_url=config.llm.base_url,
+        tools=[],  # критично: без инструментов
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+    )
+
+    print("[...] модель думает (на CPU это может занять несколько минут)")
+
+    try:
+        response = llm.chat([{"role": "user", "content": goal}])
+    except RuntimeError as exc:
+        exc_str = str(exc)
+        if "Connection" in exc_str or "request failed" in exc_str:
+            print(
+                "Ollama не отвечает. Запустите 'ollama serve' "
+                "в отдельном терминале и повторите."
+            )
+        else:
+            print(f"Ошибка при обращении к модели: {exc}")
+        return
+    except KeyboardInterrupt:
+        print("Прервано пользователем.")
+        return
+
+    if not response.content or not response.content.strip():
+        print("Модель вернула пустой ответ.")
+        return
+
+    print(response.content)
+
+
+def ask_interactive(
+    config: AppConfig, logger: logging.Logger
+) -> None:
+    """`python -m src.agent ask` — интерактивный чат без инструментов."""
+    from src.agent.llm_ollama import OllamaLLM
+
+    llm = OllamaLLM(
+        model=config.llm.model,
+        base_url=config.llm.base_url,
+        tools=[],
+        temperature=config.llm.temperature,
+        max_tokens=config.llm.max_tokens,
+    )
+
+    print(
+        f"AI Local Agent — чат с моделью "
+        f"(модель: {config.llm.model}, без инструментов)"
+    )
+    print("Введите вопрос или /quit для выхода.")
+
+    while True:
+        try:
+            question = input("> ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print("Выход.")
+            return
+
+        if not question.strip():
+            continue
+
+        if question.strip().lower() in {"/quit", "/exit", "exit", "quit"}:
+            print("Выход.")
+            return
+
+        try:
+            response = llm.chat([{"role": "user", "content": question}])
+            if response.content and response.content.strip():
+                print(response.content)
+            else:
+                print("(модель вернула пустой ответ)")
+        except RuntimeError as exc:
+            exc_str = str(exc)
+            if "Connection" in exc_str or "request failed" in exc_str:
+                print(
+                    "Ollama не отвечает. Запустите 'ollama serve' "
+                    "и повторите."
+                )
+            else:
+                print(f"Ошибка: {exc}")
+        except KeyboardInterrupt:
+            print()
+            print("Выход.")
+            return
+
+        print()  # разделитель между вопросами и ответами

@@ -82,6 +82,28 @@ class TestDispatch:
         assert captured["top_k"] == 3
         assert captured["truncate"] is True
 
+    def test_ask_dispatches_to_ask_once(self, monkeypatch):
+        captured = {}
+
+        def fake(goal, config, logger):
+            captured["goal"] = goal
+
+        monkeypatch.setattr("src.agent.cli.ask_once", fake)
+        _invoke(["ask", "кто такой Достоевский?"])
+
+        assert captured["goal"] == "кто такой Достоевский?"
+
+    def test_ask_interactive_when_no_goal(self, monkeypatch):
+        captured = {}
+
+        def fake(config, logger):
+            captured["called"] = True
+
+        monkeypatch.setattr("src.agent.cli.ask_interactive", fake)
+        _invoke(["ask"])
+
+        assert captured.get("called") is True
+
 
 class TestConfigError:
     def test_missing_config_exits_1(self, capsys):
@@ -94,3 +116,93 @@ class TestConfigError:
 
         assert exc.value.code == 1
         assert "config/settings.toml" in capsys.readouterr().out
+
+
+class TestAskOnce:
+    def _make_config(self):
+        from unittest.mock import MagicMock
+
+        config = MagicMock()
+        config.llm.model = "test-model"
+        config.llm.base_url = "http://localhost:11434"
+        config.llm.temperature = None
+        config.llm.max_tokens = None
+        return config
+
+    def test_ask_once_prints_content(self, monkeypatch, capsys):
+        from src.agent.llm import LLMResponse
+
+        class FakeLLM:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def chat(self, messages):
+                return LLMResponse(
+                    type="final",
+                    content="Достоевский — русский писатель.",
+                )
+
+        monkeypatch.setattr("src.agent.llm_ollama.OllamaLLM", FakeLLM)
+
+        from src.agent.cli import ask_once
+
+        ask_once("кто такой Достоевский?", self._make_config(), MagicMock())
+        out = capsys.readouterr().out
+        assert "Достоевский — русский писатель." in out
+
+    def test_ask_once_uses_empty_tools(self, monkeypatch):
+        """ask_once создаёт OllamaLLM с tools=[] — иначе routing сломается."""
+        from src.agent.llm import LLMResponse
+
+        captured = {}
+
+        class FakeLLM:
+            def __init__(self, **kwargs):
+                captured["tools"] = kwargs.get("tools")
+
+            def chat(self, messages):
+                return LLMResponse(type="final", content="ok")
+
+        monkeypatch.setattr("src.agent.llm_ollama.OllamaLLM", FakeLLM)
+
+        from src.agent.cli import ask_once
+
+        ask_once("q", self._make_config(), MagicMock())
+
+        assert captured["tools"] == []
+
+    def test_ask_once_empty_content_prints_message(
+        self, monkeypatch, capsys
+    ):
+        from src.agent.llm import LLMResponse
+
+        class FakeLLM:
+            def __init__(self, **kwargs):
+                pass
+
+            def chat(self, messages):
+                return LLMResponse(type="final", content="")
+
+        monkeypatch.setattr("src.agent.llm_ollama.OllamaLLM", FakeLLM)
+
+        from src.agent.cli import ask_once
+
+        ask_once("q", self._make_config(), MagicMock())
+        out = capsys.readouterr().out
+        assert "пустой ответ" in out.lower()
+
+    def test_ask_once_runtime_error_connection(self, monkeypatch, capsys):
+        class FakeLLM:
+            def __init__(self, **kwargs):
+                pass
+
+            def chat(self, messages):
+                raise RuntimeError("Ollama request failed: Connection refused")
+
+        monkeypatch.setattr("src.agent.llm_ollama.OllamaLLM", FakeLLM)
+
+        from src.agent.cli import ask_once
+
+        ask_once("q", self._make_config(), MagicMock())
+        out = capsys.readouterr().out
+        assert "Ollama не отвечает" in out

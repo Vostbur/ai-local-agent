@@ -24,6 +24,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="Выполнить одну задачу")
     p_run.add_argument("goal", help="Цель агента (текст)")
 
+    p_ask = sub.add_parser(
+        "ask",
+        help="Спросить модель без инструментов (как 'ollama run')",
+    )
+    p_ask.add_argument(
+        "goal",
+        nargs="?",
+        default=None,
+        help="Вопрос. Если не указан — интерактивный режим",
+    )
+    
     sub.add_parser("chat", help="Интерактивный режим")
 
     p_index = sub.add_parser("index", help="Пересобрать RAG-индекс")
@@ -84,6 +95,14 @@ def main(argv: list[str] | None = None) -> None:
 
         interactive_loop(config, logger)
 
+    elif args.command == "ask":
+        from src.agent.cli import ask_interactive, ask_once
+
+        if args.goal:
+            ask_once(args.goal, config, logger)
+        else:
+            ask_interactive(config, logger)
+            
     elif args.command == "index":
         from src.agent.cli import build_index_cmd
 
