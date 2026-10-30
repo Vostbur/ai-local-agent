@@ -58,6 +58,7 @@ class PathsConfig:
     Атрибуты:
         data_dir: Корневая директория данных.
         notes_dir: Путь к директории заметок.
+        trash_dir: Путь к директории корзины (для удалённых заметок/документов).
         inbox_dir: Путь к входящим.
         photos_dir: Путь к фотографиям.
         documents_dir: Корпус документов для RAG (Markdown, TXT, позже PDF/DOCX).
@@ -70,6 +71,7 @@ class PathsConfig:
 
     data_dir: Path = Path("data")
     notes_dir: Path = Path("data/notes")
+    trash_dir: Path = Path("data/trash")
     inbox_dir: Path = Path("data/inbox")
     photos_dir: Path = Path("data/photos")
     documents_dir: Path = Path("data/documents")
@@ -151,6 +153,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     paths = PathsConfig(
         data_dir=_resolve_path(paths_raw.get("data_dir", "data")),
         notes_dir=_resolve_path(paths_raw.get("notes_dir", "data/notes")),
+        trash_dir=_resolve_path(paths_raw.get("trash_dir", "data/trash")),
         inbox_dir=_resolve_path(paths_raw.get("inbox_dir", "data/inbox")),
         photos_dir=_resolve_path(paths_raw.get("photos_dir", "data/photos")),
         documents_dir=_resolve_path(paths_raw.get("documents_dir", "data/documents")),

@@ -57,10 +57,14 @@ def test_iter_md_files_sorted_and_only_md(tmp_path: Path) -> None:
     (tmp_path / "sub").mkdir()
     (tmp_path / "sub" / "d.md").write_text("# D", encoding="utf-8")
 
-    result = iter_md_files(tmp_path)
+    # Этап B: iter_md_files по умолчанию рекурсивен (категории = подпапки).
+    # Верхний уровень — через recursive=False.
+    flat = iter_md_files(tmp_path, recursive=False)
+    assert [p.name for p in flat] == ["a.md", "b.md"]
 
-    names = [p.name for p in result]
-    assert names == ["a.md", "b.md"]
+    # Рекурсивный обход находит подпапку.
+    recursive = iter_md_files(tmp_path)
+    assert [p.name for p in recursive] == ["a.md", "b.md", "d.md"]
 
 
 def test_load_note_with_heading(tmp_path: Path) -> None:

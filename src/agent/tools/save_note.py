@@ -1,4 +1,4 @@
-"""Сохранение заметки в Markdown-файл."""
+"""Сохранение Markdown-заметок с защитой от перезаписи."""
 
 from __future__ import annotations
 
@@ -7,30 +7,12 @@ import unicodedata
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
+from src.agent.tools._search import validate_category
 
 _WINDOWS_RESERVED = {
-    "con",
-    "prn",
-    "aux",
-    "nul",
-    "com1",
-    "com2",
-    "com3",
-    "com4",
-    "com5",
-    "com6",
-    "com7",
-    "com8",
-    "com9",
-    "lpt1",
-    "lpt2",
-    "lpt3",
-    "lpt4",
-    "lpt5",
-    "lpt6",
-    "lpt7",
-    "lpt8",
-    "lpt9",
+    "con", "prn", "aux", "nul",
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
 }
 
 
@@ -42,7 +24,7 @@ def _make_slug(title: str) -> str:
     """
     slug = title.lower()
     slug = slug.replace(" ", "_")
-    slug = re.sub(r'[<>:"/\\|?*]', "", slug)
+    slug = re.sub(r'[<>:"/|?*]', "", slug)
     slug = re.sub(r"[\u0000-\u001f\u007f-\u009f]", "", slug)
     slug = "".join(
         ch
@@ -60,41 +42,67 @@ def _make_slug(title: str) -> str:
     return slug
 
 
-def save_note(title: str, content: str, notes_dir: Path) -> Path:
+def save_note(
+    title: str,
+    content: str,
+    notes_dir: Path,
+    category: str | None = None,
+) -> dict:
     """Сохранить заметку в Markdown-файл.
 
     Args:
         title: Заголовок заметки.
         content: Содержимое заметки.
         notes_dir: Директория для сохранения заметок.
+        category: Опциональная категория (подпапка в notes_dir).
 
     Returns:
-        Путь к созданному файлу.
+        Словарь ``{"path": относительный путь, "title": заголовок,
+        "category": категория или None}``.
 
     Raises:
-        ValueError: Если заголовок пустой.
+        ValueError: Если заголовок пустой или категория невалидна.
     """
     if not title.strip():
         raise ValueError("title must not be empty")
 
-    notes_dir.mkdir(parents=True, exist_ok=True)
+    category_clean = validate_category(category)
+
+    if category_clean:
+        target_dir = notes_dir / category_clean
+    else:
+        target_dir = notes_dir
+
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     slug = _make_slug(title)
 
-    candidate = notes_dir / f"{slug}.md"
+    candidate = target_dir / f"{slug}.md"
     suffix = 1
     while candidate.exists():
-        candidate = notes_dir / f"{slug}_{suffix}.md"
+        candidate = target_dir / f"{slug}_{suffix}.md"
         suffix += 1
 
     candidate.write_text(f"# {title}\n\n{content}\n", encoding="utf-8")
 
-    return candidate
+    rel_path = candidate.relative_to(notes_dir).as_posix()
+
+    return {
+        "path": rel_path,
+        "title": title,
+        "category": category_clean,
+    }
 
 
 SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
     name="save_note",
-    description="Save a note to a Markdown file. Use when the user asks to: сохранить заметку, записать заметку, создать заметку, занести в заметки, save a note, write a note, create a note. Creates a new file; never overwrites.",
+    description=(
+        "Save a note to a Markdown file in data/notes/. Use when the user asks to: "
+        "сохранить заметку, записать заметку, создать заметку, занести в заметки, "
+        "save a note, write a note, create a note. "
+        "Optionally place the note in a category (subfolder). "
+        "Creates a new file; never overwrites existing ones."
+    ),
     parameters={
         "type": "object",
         "properties": {
@@ -109,6 +117,13 @@ SAVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
             "content": {
                 "type": "string",
                 "description": "Note body in Markdown. If the user did not provide content, use an empty string.",
+            },
+            "category": {
+                "type": "string",
+                "description": (
+                    "Optional category (subfolder) for the note. Example: 'Работа', 'Идеи'. "
+                    "If the user did not mention a category, do NOT invent one — leave empty or omit."
+                ),
             },
         },
         "required": ["title", "content"],

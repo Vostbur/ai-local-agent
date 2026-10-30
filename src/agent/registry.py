@@ -20,6 +20,8 @@ class ToolDefinition:
             из ``config.paths.notes_dir`` в аргументы инструмента.
         needs_output_dir: Если True, оркестратор добавит ``output_dir``
             из ``config.paths.generated_dir`` в аргументы инструмента.
+        needs_trash_dir: Если True, оркестратор добавит ``trash_dir``
+            из ``config.paths.trash_dir`` в аргументы инструмента.
     """
 
     name: str
@@ -28,6 +30,7 @@ class ToolDefinition:
     func: Callable[..., Any]
     needs_notes_dir: bool = False
     needs_output_dir: bool = False
+    needs_trash_dir: bool = False
 
 
 class ToolRegistry:

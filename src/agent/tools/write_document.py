@@ -17,7 +17,7 @@ def write_document(title: str, content: str, output_dir: Path) -> dict:
         output_dir: Директория для сохранения документов.
 
     Returns:
-        Словарь с путём, заголовком и размером содержимого.
+        Словарь с абсолютным путём, заголовком и размером содержимого.
     """
     stripped = content.lstrip()
     if stripped.startswith("# "):
@@ -25,8 +25,15 @@ def write_document(title: str, content: str, output_dir: Path) -> dict:
         # Если первая строка — заголовок (не важно, совпадает с title или нет),
         # save_note добавит '# {title}' сам. Убираем дубль.
         content = rest.lstrip("\n")
-    path = save_note(title, content, output_dir)
-    return {"path": str(path), "title": title, "size_chars": len(content)}
+
+    result = save_note(title, content, output_dir)
+    absolute_path = output_dir / result["path"]
+
+    return {
+        "path": str(absolute_path),
+        "title": title,
+        "size_chars": len(content),
+    }
 
 
 WRITE_DOCUMENT_TOOL: ToolDefinition = ToolDefinition(
