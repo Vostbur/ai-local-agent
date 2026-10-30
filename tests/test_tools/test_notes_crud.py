@@ -12,7 +12,8 @@ from src.agent.tools.list_notes import list_notes
 from src.agent.tools.move_note import move_note
 from src.agent.tools.save_note import save_note
 from src.agent.tools.update_note import update_note
-
+from src.agent.tools.read_notes import read_notes
+from src.agent.tools.search_notes import search_notes
 
 @pytest.fixture
 def notes_dir(tmp_path: Path) -> Path:
@@ -328,3 +329,42 @@ class TestTitleFallback:
         _seed(notes_dir)
         result = update_note("работа/вторая.md", notes_dir, content="x")
         assert result["path"] == "работа/вторая.md"
+
+
+class TestReadSearchNotesContract:
+    """Блок 3: единый контракт — относительные пути + категория."""
+
+    def test_read_notes_relative_path_and_category(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        results = read_notes("Вторая", notes_dir)
+        assert len(results) == 1
+        assert results[0]["path"] == "работа/вторая.md"
+        assert results[0]["category"] == "работа"
+
+    def test_read_notes_root_category_none(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        results = read_notes("Первая", notes_dir)
+        assert results[0]["path"] == "первая.md"
+        assert results[0]["category"] is None
+
+    def test_search_notes_relative_path_and_category(self, notes_dir: Path) -> None:
+        _seed(notes_dir)
+        # Запрос — одно слово: у многословного «текст два» стем берётся
+        # от всей строки («текст») и находит все три заметки. Это известное
+        # ограничение стеммера (см. C2), а не баг контракта.
+        results = search_notes("два", notes_dir)
+        assert len(results) == 1
+        assert results[0]["path"] == "работа/вторая.md"
+        assert results[0]["category"] == "работа"
+
+    def test_path_from_read_notes_usable_in_crud(self, notes_dir: Path) -> None:
+        """Путь из результата можно сразу передать в update_note."""
+        _seed(notes_dir)
+        found = read_notes("Третья", notes_dir)
+        result = update_note(found[0]["path"], notes_dir, content="x")
+        assert result["path"] == "работа/третья.md"
+
+    def test_read_notes_description_mentions_category(self) -> None:
+        from src.agent.tools.read_notes import READ_NOTES_TOOL
+
+        assert "category" in READ_NOTES_TOOL.description

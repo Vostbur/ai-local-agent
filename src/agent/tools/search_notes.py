@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.agent.registry import ToolDefinition
 from src.agent.stem import stem
-from src.agent.tools._search import find_match_with_kind, iter_md_files, load_note
+from src.agent.tools._search import category_of, find_match_with_kind, iter_md_files, load_note
 
 
 def search_notes(
@@ -89,8 +89,9 @@ def search_notes(
 
         results.append(
             {
-                "path": str(path),
+                "path": path.relative_to(notes_dir).as_posix(),
                 "title": title,
+                "category": category_of(path, notes_dir),
                 "snippet": ellipsis_prefix + snippet + ellipsis_suffix,
                 "matches": matches,
             }
@@ -110,7 +111,10 @@ SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
         "explicitly asks about their own notes: \"мои заметки\", \"что я записал\", "
         "\"найди заметку\", \"my notes\", \"what did I write\". "
         "For documents, README, articles, project files — use search_documents. "
-        "Returns path, title, snippet, matches."
+        "Returns path, title, snippet, matches. Each result also includes "
+        "category (folder name, or null for uncategorized notes); path is "
+        "relative to data/notes/ and can be passed directly to "
+        "update_note/move_note/delete_note."
     ),
     parameters={
         "type": "object",

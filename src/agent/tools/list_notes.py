@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import iter_md_files, load_note, validate_category
+from src.agent.tools._search import iter_md_files, load_note, validate_category, category_of
 
 
 def list_notes(
@@ -43,8 +43,7 @@ def list_notes(
             continue
 
         rel = path.relative_to(notes_dir).as_posix()
-        parent_rel = path.parent.relative_to(notes_dir).as_posix()
-        cat = None if parent_rel == "." else parent_rel
+        cat = category_of(path, notes_dir)
 
         results.append(
             {

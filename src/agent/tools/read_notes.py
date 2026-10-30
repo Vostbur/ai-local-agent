@@ -1,11 +1,11 @@
-"""Чтение заметок из директории Markdown-файлов."""
+"""Чтение и фильтрация заметок по названию."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import find_match, iter_md_files, load_note
+from src.agent.tools._search import category_of, find_match, iter_md_files, load_note
 
 
 def read_notes(
@@ -23,7 +23,8 @@ def read_notes(
             ``None`` — использовать дефолт 50; ``<= 0`` — вернуть пустой список.
 
     Returns:
-        Список словарей с полями path, title, preview.
+        Список словарей с полями path (относительный от notes_dir),
+        title, category (None для корня), preview.
     """
     if max_results is None:
         max_results = 50
@@ -56,8 +57,9 @@ def read_notes(
 
         results.append(
             {
-                "path": str(path),
+                "path": path.relative_to(notes_dir).as_posix(),
                 "title": title,
+                "category": category_of(path, notes_dir),
                 "preview": body[:200].replace("\n", " ").strip(),
             }
         )
@@ -71,7 +73,11 @@ def read_notes(
 READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
     name="read_notes",
     description=(
-        "List notes by matching the query against note TITLES and FILENAMES only (not body). Use this when the user asks: \"есть ли заметка под названием\", \"найди заметку с заголовком\", \"покажи заметки про\", \"is there a note titled\", \"find a note by title\", \"list notes\". For searching INSIDE note bodies use search_notes instead. Returns path, title, preview."
+        "List notes by matching the query against note TITLES and FILENAMES only (not body). Use this when the user asks:"
+        "\"есть ли заметка под названием\", \"найди заметку с заголовком\", \"покажи заметки про\", \"is there a note titled\", "
+        "\"find a note by title\", \"list notes\"."         
+        "For searching INSIDE note bodies use search_notes instead. "
+        "Returns path, title, preview. Includes category; paths are relative."
     ),
     parameters={
         "type": "object",

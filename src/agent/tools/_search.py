@@ -281,3 +281,8 @@ def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
 
     ensure_note_file(candidate, path_repr)
     return candidate  # недостижимо: ensure_note_file бросает исключение
+
+def category_of(path: Path, notes_dir: Path) -> str | None:
+    """Категория заметки: относительная папка или ``None`` для корня."""
+    parent_rel = path.parent.relative_to(notes_dir).as_posix()
+    return None if parent_rel == "." else parent_rel
