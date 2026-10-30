@@ -6,55 +6,57 @@ import logging
 import sys
 from pathlib import Path
 
-from src.agent.app import build_orchestrator
 from src.agent.config import AppConfig
-from src.agent.orchestrator import MaxStepsExceeded
+from src.agent.orchestrator import FinalEvent, StepEvent
 from src.agent.rag.build import build_index
+from src.agent.service import AgentService
 
 
-def _run_one(orchestrator, goal: str, logger: logging.Logger) -> None:
-    """Выполнить одну задачу и напечатать результат."""
+def _run_one(service: AgentService, goal: str, logger: logging.Logger) -> None:
+    """Выполнить одну задачу через AgentService и напечатать результат."""
     print("[...] выполняется, подождите (на CPU это может занять несколько минут)")
 
     try:
-        result = orchestrator.run(goal)
-    except MaxStepsExceeded as exc:
-        print(f"Достигнут лимит шагов: {exc}")
-        return
-    except RuntimeError as exc:
-        exc_str = str(exc)
-        if "Connection" in exc_str or "request failed" in exc_str:
-            print(
-                "Ollama не отвечает. Запустите 'ollama serve' "
-                "в отдельном терминале и повторите."
-            )
-        else:
-            print(f"Ошибка при обращении к модели: {exc}")
-        return
+        for event in service.ask(goal):
+            if isinstance(event, StepEvent):
+                if event.event_type == "tool_result":
+                    count_str = (
+                        f", {event.count} элементов"
+                        if event.count is not None
+                        else ""
+                    )
+                    print(
+                        f"[шаг {event.step}] {event.tool_name} → "
+                        f"{event.status}{count_str}"
+                    )
+                # llm_call и final не печатаем — они разом после завершения
+            elif isinstance(event, FinalEvent):
+                result = event.result
+                if result.success:
+                    print(f"Готово: {result.final_answer}")
+                    print(f"Шагов: {result.steps_used}")
+                    if result.tool_results:
+                        print(f"Результаты инструментов: {result.tool_results}")
+                else:
+                    print(
+                        f"Не удалось выполнить задачу. "
+                        f"Шагов: {result.steps_used}"
+                    )
+                    if result.error:
+                        print(f"Причина: {result.error}")
     except KeyboardInterrupt:
         print("Прервано пользователем.")
-        return
-
-    if result.success:
-        print(f"Готово: {result.final_answer}")
-        print(f"Шагов: {result.steps_used}")
-        if result.tool_results:
-            print(f"Результаты инструментов: {result.tool_results}")
-    else:
-        print(f"Не удалось выполнить задачу. Шагов: {result.steps_used}")
-        if result.error:
-            print(f"Причина: {result.error}")
 
 
 def run_once(goal: str, config: AppConfig, logger: logging.Logger) -> None:
-    """`python -m src.agent run "цель"` — одна задача."""
-    orchestrator = build_orchestrator(config, logger)
-    _run_one(orchestrator, goal, logger)
+    """`python -m agent run "цель"` — одна задача."""
+    service = AgentService(config, logger)
+    _run_one(service, goal, logger)
 
 
 def interactive_loop(config: AppConfig, logger: logging.Logger) -> None:
-    """`python -m src.agent chat` — интерактивный режим."""
-    orchestrator = build_orchestrator(config, logger)
+    """`python -m agent chat` — интерактивный режим."""
+    service = AgentService(config, logger)
 
     print(f"AI Local Agent (модель: {config.llm.model})")
     print("Введите цель или /quit для выхода.")
@@ -74,7 +76,7 @@ def interactive_loop(config: AppConfig, logger: logging.Logger) -> None:
             print("Выход.")
             return
 
-        _run_one(orchestrator, goal, logger)
+        _run_one(service, goal, logger)
 
 
 def build_index_cmd(
@@ -84,7 +86,7 @@ def build_index_cmd(
     batch_size: int,
     logger: logging.Logger,
 ) -> None:
-    """`python -m src.agent index` — пересборка RAG-индекса."""
+    """`python -m agent index` — пересборка RAG-индекса."""
     root = documents.resolve() if documents else config.paths.documents_dir
 
     try:
@@ -111,7 +113,7 @@ def search_cmd(
     truncate: bool,
     config: AppConfig,
 ) -> None:
-    """`python -m src.agent search "запрос"` — отладка retrieval без LLM."""
+    """`python -m agent search "запрос"` — отладка retrieval без LLM."""
     from src.agent.tools.search_documents import make_search_documents_tool
 
     tool = make_search_documents_tool(config)
@@ -142,55 +144,35 @@ def search_cmd(
 def ask_once(
     goal: str, config: AppConfig, logger: logging.Logger
 ) -> None:
-    """`python -m src.agent ask "вопрос"` — прямой чат с моделью, без tools."""
-    from src.agent.llm_ollama import OllamaLLM
-
-    llm = OllamaLLM(
-        model=config.llm.model,
-        base_url=config.llm.base_url,
-        tools=[],
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
-    )
+    """`python -m agent ask "вопрос"` — чат с моделью без tools."""
+    service = AgentService(config, logger)
 
     print("[...] модель думает (на CPU это может занять несколько минут)")
 
     try:
-        response = llm.chat([{"role": "user", "content": goal}])
-    except RuntimeError as exc:
-        exc_str = str(exc)
-        if "Connection" in exc_str or "request failed" in exc_str:
-            print(
-                "Ollama не отвечает. Запустите 'ollama serve' "
-                "в отдельном терминале и повторите."
-            )
-        else:
-            print(f"Ошибка при обращении к модели: {exc}")
-        return
+        for event in service.ask_plain(goal):
+            if isinstance(event, FinalEvent):
+                result = event.result
+                if result.success:
+                    print(result.final_answer)
+                elif result.error == "empty final answer":
+                    print("Модель вернула пустой ответ.")
+                elif result.error and "Connection" in result.error:
+                    print(
+                        "Ollama не отвечает. Запустите 'ollama serve' "
+                        "в отдельном терминале и повторите."
+                    )
+                else:
+                    print(f"Ошибка: {result.error}")
     except KeyboardInterrupt:
         print("Прервано пользователем.")
-        return
-
-    if not response.content or not response.content.strip():
-        print("Модель вернула пустой ответ.")
-        return
-
-    print(response.content)
 
 
 def ask_interactive(
     config: AppConfig, logger: logging.Logger
 ) -> None:
-    """`python -m src.agent ask` — интерактивный чат без инструментов."""
-    from src.agent.llm_ollama import OllamaLLM
-
-    llm = OllamaLLM(
-        model=config.llm.model,
-        base_url=config.llm.base_url,
-        tools=[],
-        temperature=config.llm.temperature,
-        max_tokens=config.llm.max_tokens,
-    )
+    """`python -m agent ask` — интерактивный чат без инструментов."""
+    service = AgentService(config, logger)
 
     print(
         f"AI Local Agent — чат с моделью "
@@ -214,20 +196,20 @@ def ask_interactive(
             return
 
         try:
-            response = llm.chat([{"role": "user", "content": question}])
-            if response.content and response.content.strip():
-                print(response.content)
-            else:
-                print("(модель вернула пустой ответ)")
-        except RuntimeError as exc:
-            exc_str = str(exc)
-            if "Connection" in exc_str or "request failed" in exc_str:
-                print(
-                    "Ollama не отвечает. Запустите 'ollama serve' "
-                    "и повторите."
-                )
-            else:
-                print(f"Ошибка: {exc}")
+            for event in service.ask_plain(question):
+                if isinstance(event, FinalEvent):
+                    result = event.result
+                    if result.success:
+                        print(result.final_answer)
+                    elif result.error == "empty final answer":
+                        print("(модель вернула пустой ответ)")
+                    elif result.error and "Connection" in result.error:
+                        print(
+                            "Ollama не отвечает. Запустите "
+                            "'ollama serve' и повторите."
+                        )
+                    else:
+                        print(f"Ошибка: {result.error}")
         except KeyboardInterrupt:
             print()
             print("Выход.")

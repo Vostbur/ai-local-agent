@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -65,8 +66,7 @@ def _summarize_for_log(result: object) -> str:
     """Краткое описание результата инструмента для лога.
 
     Не логирует содержимое списков (preview/snippet), чтобы в лог
-    не попадали тексты заметок. Для ``Path`` оставляет путь —
-    это не текст заметки, а адрес файла, полезен для отладки.
+    не попадали тексты заметок. Для ``Path`` оставляет путь.
     """
     if isinstance(result, Path):
         return str(result)
@@ -82,12 +82,40 @@ class MaxStepsExceeded(Exception):
 
 
 @dataclass
+class StepEvent:
+    """Событие одного шага оркестратора (для CLI / SSE / UI).
+
+    Атрибуты:
+        step: номер шага (1-based).
+        event_type: ``"llm_call"`` (перед вызовом LLM), ``"tool_result"``
+            (после выполнения инструмента), ``"final"`` (LLM вернула финал).
+        tool_name: имя инструмента (для ``tool_result``).
+        status: для ``tool_result`` — ``"SUCCESS"``/``"ERROR"``/``"SKIPPED"``;
+            для ``final`` — ``"ok"`` или ``"empty"``.
+        count: число элементов, если результат инструмента — список.
+    """
+
+    step: int
+    event_type: str
+    tool_name: str | None = None
+    status: str | None = None
+    count: int | None = None
+
+
+@dataclass
 class OrchestratorResult:
     success: bool
     final_answer: str | None
     steps_used: int
     error: str | None = None
     tool_results: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FinalEvent:
+    """Финальное событие: обёртка над OrchestratorResult."""
+
+    result: OrchestratorResult
 
 
 class Orchestrator:
@@ -107,7 +135,17 @@ class Orchestrator:
         self.tool_context = tool_context or {}
         self.max_tool_failures = max_tool_failures
 
-    def run(self, goal: str) -> OrchestratorResult:
+    def run(
+        self,
+        goal: str,
+        on_step: Callable[[StepEvent], None] | None = None,
+    ) -> OrchestratorResult:
+        """Выполнить цель, опционально сообщая о каждом шаге через ``on_step``."""
+
+        def emit(event: StepEvent) -> None:
+            if on_step is not None:
+                on_step(event)
+
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": goal},
@@ -117,6 +155,7 @@ class Orchestrator:
         failed_calls: dict[str, int] = {}
 
         for step in range(1, self.max_steps + 1):
+            emit(StepEvent(step=step, event_type="llm_call"))
             response = self.llm.chat(messages)
             self.logger.info("step=%d type=%s", step, response.type)
 
@@ -124,6 +163,11 @@ class Orchestrator:
                 if not response.content or not response.content.strip():
                     self.logger.warning(
                         "empty final answer at step %d", step
+                    )
+                    emit(
+                        StepEvent(
+                            step=step, event_type="final", status="empty"
+                        )
                     )
                     return OrchestratorResult(
                         success=False,
@@ -133,6 +177,9 @@ class Orchestrator:
                         tool_results=tool_results,
                     )
                 self.logger.info("final: %s", response.content)
+                emit(
+                    StepEvent(step=step, event_type="final", status="ok")
+                )
                 return OrchestratorResult(
                     success=True,
                     final_answer=response.content,
@@ -187,6 +234,16 @@ class Orchestrator:
                             response.tool_name,
                             _summarize_for_log(result),
                         )
+
+                emit(
+                    StepEvent(
+                        step=step,
+                        event_type="tool_result",
+                        tool_name=response.tool_name,
+                        status=tool_status,
+                        count=len(result) if isinstance(result, list) else None,
+                    )
+                )
 
                 display_args = response.tool_arguments or {}
                 messages.append(

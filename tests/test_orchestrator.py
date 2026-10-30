@@ -569,3 +569,55 @@ def test_whitespace_only_final_yields_error():
 
     assert result.success is False
     assert result.error == "empty final answer"
+
+
+def test_on_step_called_for_tool_call():
+    """on_step получает StepEvent для tool_result."""
+    def echo_tool(text: str) -> str:
+        return text
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Echo the text",
+            parameters={
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+            },
+            func=echo_tool,
+        )
+    )
+
+    llm = FakeLLM(
+        [
+            LLMResponse(
+                type="tool_call", tool_name="echo", tool_arguments={"text": "hi"}
+            ),
+            LLMResponse(type="final", content="done"),
+        ]
+    )
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    events: list = []
+    orchestrator.run("echo hi", on_step=events.append)
+
+    tool_events = [e for e in events if e.event_type == "tool_result"]
+    assert len(tool_events) == 1
+    assert tool_events[0].tool_name == "echo"
+    assert tool_events[0].status == "SUCCESS"
+    assert tool_events[0].step == 1
+
+
+def test_on_step_called_for_final():
+    """on_step получает StepEvent final со status='ok'."""
+    llm = FakeLLM([LLMResponse(type="final", content="done")])
+    registry = ToolRegistry()
+    orchestrator = Orchestrator(llm, registry, logger)
+
+    events: list = []
+    orchestrator.run("goal", on_step=events.append)
+
+    final_events = [e for e in events if e.event_type == "final"]
+    assert len(final_events) == 1
+    assert final_events[0].status == "ok"
