@@ -1,0 +1,9 @@
+[x-cloak] { display: none !important; }
+
+html { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+::selection { background-color: rgb(199 210 254); color: rgb(30 27 75); }
+.dark ::selection { background-color: rgb(55 48 163); color: rgb(238 242 255); }
+
+* { scrollbar-width: thin; scrollbar-color: rgb(214 211 209) transparent; }
+.dark * { scrollbar-color: rgb(51 65 85) transparent; }

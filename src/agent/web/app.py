@@ -211,4 +211,8 @@ def create_app(
                 "error": f"internal: {exc}",
             }
 
+    from agent.web.notes.app import make_notes_app
+
+    app.mount("/notes", make_notes_app(config, logger))
+
     return app
