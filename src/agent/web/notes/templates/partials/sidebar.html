@@ -1,42 +1,30 @@
-<nav class="space-y-1">
+<nav class="flex items-center gap-2 whitespace-nowrap">
   <a href="#"
-     hx-get="api/notes"
+     hx-get="/notes/api/notes"
      hx-vals='{"category": ""}'
      hx-include="[name='q']"
      hx-target="#notes-grid"
      hx-swap="innerHTML"
      onclick="document.getElementById('category-filter').value = '';"
-     class="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition
-            {% if not active_category %}bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}text-stone-600 hover:bg-stone-100 dark:text-slate-300 dark:hover:bg-slate-800{% endif %}">
-    <span class="flex items-center gap-2.5">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/>
-      </svg>
-      Все заметки
-    </span>
+     class="flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition
+            {% if not active_category %}bg-stone-900 text-white dark:bg-slate-100 dark:text-slate-900{% else %}bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700{% endif %}">
+    Все заметки
   </a>
 
-  {% if categories %}
-    <p class="px-3 pt-4 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-slate-500">
-      Категории
-    </p>
-    {% for cat in categories %}
-      {% set c = category_color(cat.name) %}
-      <a href="#"
-         hx-get="api/notes"
-         hx-vals='{"category": "{{ cat.name }}"}'
-         hx-include="[name='q']"
-         hx-target="#notes-grid"
-         hx-swap="innerHTML"
-         onclick="document.getElementById('category-filter').value = '{{ cat.name }}';"
-         class="group flex items-center justify-between rounded-lg px-3 py-2 text-sm transition
-                {% if active_category == cat.name %}bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}text-stone-600 hover:bg-stone-100 dark:text-slate-300 dark:hover:bg-slate-800{% endif %}">
-        <span class="flex min-w-0 items-center gap-2.5">
-          <span class="h-2 w-2 shrink-0 rounded-full" style="background: {{ c.fg }}"></span>
-          <span class="truncate">{{ cat.name }}</span>
-        </span>
-        <span class="shrink-0 text-[11px] tabular-nums text-stone-400 dark:text-slate-500">{{ cat.note_count }}</span>
-      </a>
-    {% endfor %}
-  {% endif %}
+  {% for cat in categories %}
+    {% set c = category_color(cat.name) %}
+    <a href="#"
+       hx-get="/notes/api/notes"
+       hx-vals='{"category": "{{ cat.name }}"}'
+       hx-include="[name='q']"
+       hx-target="#notes-grid"
+       hx-swap="innerHTML"
+       onclick="document.getElementById('category-filter').value = '{{ cat.name }}';"
+       class="flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition
+              {% if active_category == cat.name %}bg-stone-900 text-white border-transparent dark:bg-slate-100 dark:text-slate-900{% else %}bg-white text-stone-600 border-stone-200 hover:bg-stone-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700{% endif %}">
+      <span class="h-2 w-2 rounded-full" style="background: {{ c.fg }}"></span>
+      {{ cat.name }}
+      <span class="text-[11px] opacity-60">{{ cat.note_count }}</span>
+    </a>
+  {% endfor %}
 </nav>

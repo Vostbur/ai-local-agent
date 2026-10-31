@@ -1,5 +1,5 @@
 <div class="flex h-full flex-col">
-  <header class="flex items-center justify-between mb-6">
+  <header class="flex items-center justify-between mb-4">
     <h1 class="text-2xl font-bold tracking-tight">Заметки</h1>
     <div class="flex items-center gap-3">
       <div class="relative w-64">
@@ -8,26 +8,22 @@
                hx-get="/notes/api/notes" hx-trigger="input changed delay:300ms" hx-target="#notes-grid" hx-include="[name='category']">
       </div>
       <button hx-get="/notes/api/notes/form" hx-target="#modal-body" @click="$dispatch('open-modal')"
-              class="flex h-10 items-center gap-1.5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 px-4 text-sm font-medium text-white shadow-sm">
+              class="flex h-10 items-center gap-1.5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 px-4 text-sm font-medium text-white shadow-sm hover:from-indigo-600 hover:to-violet-600 transition">
         + Новая
       </button>
     </div>
   </header>
 
-  <div class="flex-1 flex gap-6">
-    <!-- Внутренний сайдбар с категориями -->
-    <div class="w-48 shrink-0">
-      <div id="notes-sidebar-inner" hx-get="/notes/api/notes/sidebar" hx-trigger="load, refresh from:#sidebar-refresh-trigger" class="space-y-1">
-        <!-- подгрузится автоматически -->
-      </div>
-    </div>
-    
-    <!-- Сетка заметок -->
-    <div class="flex-1">
-      <input type="hidden" name="category" id="category-filter" value="">
-      <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" hx-get="/notes/api/notes" hx-trigger="load">
-         <!-- подгрузится автоматически -->
-      </div>
+  <!-- Категории в виде таблеток -->
+  <div class="mb-6 flex items-center gap-2 overflow-x-auto pb-2" id="notes-sidebar-inner" hx-get="/notes/api/notes/sidebar" hx-trigger="load, refresh from:#sidebar-refresh-trigger">
+    <!-- подгрузится автоматически -->
+  </div>
+
+  <!-- Сетка заметок (БЕЗ классов grid, чтобы не ломать Masonry) -->
+  <div class="flex-1">
+    <input type="hidden" name="category" id="category-filter" value="">
+    <div id="notes-grid" class="w-full" hx-get="/notes/api/notes" hx-trigger="load">
+      <!-- подгрузится автоматически -->
     </div>
   </div>
 </div>
