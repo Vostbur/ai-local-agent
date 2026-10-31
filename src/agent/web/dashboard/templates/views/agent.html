@@ -1,0 +1,84 @@
+<div class="mx-auto max-w-3xl h-full flex flex-col">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight">Агент</h1>
+    <p class="text-sm text-stone-500 dark:text-slate-400 mt-1">Задайте цель. Он может искать по документам, читать и создавать файлы.</p>
+  </div>
+
+  <div class="flex-1 rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-800/50 flex flex-col min-h-[400px]">
+    <!-- Лог -->
+    <div id="chat-log" class="flex-1 overflow-y-auto mb-4 space-y-4 font-mono text-sm leading-relaxed text-stone-700 dark:text-slate-300 whitespace-pre-wrap">
+      <div class="text-stone-400 dark:text-slate-500 italic">Ожидание команды...</div>
+    </div>
+    
+    <!-- Ввод -->
+    <form id="agent-form" class="relative" onsubmit="event.preventDefault(); submitAgent();">
+      <textarea id="agent-input" rows="2" placeholder="Например: Найди в документах информацию про EcoRouter и сохрани в заметку..."
+                class="w-full resize-none rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 pr-24 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900/60 dark:focus:border-indigo-500 dark:focus:ring-indigo-900/50"></textarea>
+      <button type="submit" id="agent-submit-btn"
+              class="absolute bottom-2.5 right-2.5 flex h-8 items-center gap-1.5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 px-3 text-xs font-medium text-white shadow-sm transition hover:from-indigo-600 hover:to-violet-600 disabled:opacity-50">
+        Спросить
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+  async function submitAgent() {
+    const input = document.getElementById('agent-input');
+    const log = document.getElementById('chat-log');
+    const btn = document.getElementById('agent-submit-btn');
+    const goal = input.value.trim();
+    if (!goal) return;
+
+    // Очистка и подготовка UI
+    input.value = '';
+    input.disabled = true;
+    btn.disabled = true;
+    log.innerHTML += `\n<div class="mt-4"><span class="text-indigo-500 font-bold">> Цель:</span> ${goal}</div>\n`;
+    
+    try {
+      const res = await fetch('/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal })
+      });
+      
+      if (!res.ok) throw new Error('Ошибка при запуске агента');
+      const data = await res.json();
+      
+      // Подключаемся к SSE
+      const es = new EventSource(`/stream/${data.task_id}`);
+      
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          // Предполагаем, что payload содержит текст события (уточните формат в вашем бэкенде)
+          if (payload.text) {
+             log.innerHTML += payload.text;
+             log.scrollTop = log.scrollHeight;
+          }
+          if (payload.done) {
+             es.close();
+             input.disabled = false;
+             btn.disabled = false;
+             input.focus();
+          }
+        } catch (e) {
+          log.innerHTML += event.data;
+          log.scrollTop = log.scrollHeight;
+        }
+      };
+      
+      es.onerror = () => {
+        es.close();
+        input.disabled = false;
+        btn.disabled = false;
+      };
+      
+    } catch (err) {
+      log.innerHTML += `\n<span class="text-red-500">Ошибка: ${err.message}</span>`;
+      input.disabled = false;
+      btn.disabled = false;
+    }
+  }
+</script>

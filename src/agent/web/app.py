@@ -114,11 +114,11 @@ def create_app(
     app.state.service = service or AgentService(config, logger)
     app.state.tasks: dict[str, asyncio.Queue] = {}
 
-    index_html = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
+    # index_html = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
 
-    @app.get("/", response_class=HTMLResponse)
-    def index_page() -> str:
-        return index_html
+    # @app.get("/", response_class=HTMLResponse)
+    # def index_page() -> str:
+    #     return index_html
 
     @app.get("/health")
     def health() -> dict:
@@ -218,5 +218,9 @@ def create_app(
     from agent.web.documents.app import make_documents_app
 
     app.mount("/documents", make_documents_app(config, logger))
+
+    from agent.web.dashboard.app import make_dashboard_app
+
+    app.mount("/", make_dashboard_app(config, logger))
 
     return app
