@@ -55,7 +55,6 @@
         log.scrollTop = log.scrollHeight;
     }
   } else {
-    // Если истории нет, показываем приветствие
     document.getElementById('welcome-message').classList.remove('hidden');
   }
 
@@ -64,7 +63,6 @@
     const log = document.getElementById('chat-log');
     if (log) log.innerHTML = '';
     
-    // Возвращаем приветствие
     const welcome = document.getElementById('welcome-message');
     if (welcome) {
         welcome.classList.remove('hidden');
@@ -80,7 +78,6 @@
         const typing = clone.querySelector('.typing-indicator');
         if (typing && typing.closest('.flex.gap-4')) typing.closest('.flex.gap-4').remove(); 
         
-        // Скрываем приветствие в сохраненной истории, если есть сообщения
         const welcome = clone.querySelector('#welcome-message');
         const messages = clone.querySelectorAll('.flex.gap-4:not(#welcome-message)');
         
@@ -199,6 +196,7 @@
       if (!res.ok) throw new Error('Ошибка при запуске агента');
       const data = await res.json();
       
+      console.log("SSE Stream started for task:", data.task_id);
       const streamRes = await fetch(`/stream/${data.task_id}`);
       if (!streamRes.ok) throw new Error('Ошибка стрима');
       
@@ -211,13 +209,23 @@
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
+        
+        // Разбиваем по \n или \r\n
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop(); // Оставляем неполную строку
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const payloadStr = line.slice(6).trim();
-            if (!payloadStr || payloadStr === '[DONE]') continue;
+            let payloadStr = line.trim();
+            if (!payloadStr) continue;
+            
+            // Убираем префикс data: если он есть
+            if (payloadStr.startsWith('data:')) {
+                payloadStr = payloadStr.substring(5).trim();
+            }
+            
+            if (payloadStr === '[DONE]' || !payloadStr) continue;
+
+            console.log("RAW SSE Chunk:", payloadStr);
 
             if (isFirstChunk) {
                 typingIndicator.classList.add('hidden');
@@ -226,31 +234,45 @@
             }
 
             try {
-              const payload = JSON.parse(payloadStr);
-              let chunk = '';
-              if (payload.text) chunk = payload.text;
-              else if (payload.content) chunk = payload.content;
-              else if (payload.final) chunk = payload.final;
-              else if (payload.data) chunk = payload.data;
-              else if (typeof payload === 'string') chunk = payload;
-              
-              if (typeof chunk === 'string') {
-                  fullText += chunk + "\n";
-                  contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
+                const payload = JSON.parse(payloadStr);
+                let chunk = '';
+                
+                // Ищем текст в любых возможных полях JSON
+                if (typeof payload === 'string') chunk = payload;
+                else if (payload.text) chunk = payload.text;
+                else if (payload.content) chunk = payload.content;
+                else if (payload.final) chunk = payload.final;
+                else if (payload.data) {
+                    if (typeof payload.data === 'string') {
+                        try {
+                            const inner = JSON.parse(payload.data);
+                            chunk = inner.text || inner.content || payload.data;
+                        } catch(e) { chunk = payload.data; }
+                    } else {
+                        chunk = JSON.stringify(payload.data);
+                    }
+                }
+                else if (payload.type === 'final' && payload.content) chunk = payload.content;
+
+                if (typeof chunk === 'string' && chunk.trim()) {
+                    fullText += chunk + "\n";
+                    contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
+                        ? DOMPurify.sanitize(marked.parse(fullText)) 
+                        : marked.parse(fullText);
+                    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+                }
+            } catch (e) {
+                // Если не JSON, выводим как есть
+                fullText += payloadStr + "\n";
+                contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
                     ? DOMPurify.sanitize(marked.parse(fullText)) 
                     : marked.parse(fullText);
-                  if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-              }
-            } catch (e) {
-              fullText += payloadStr + "\n";
-              contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
-                ? DOMPurify.sanitize(marked.parse(fullText)) 
-                : marked.parse(fullText);
-              if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+                if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
             }
-          }
         }
       }
+      
+      console.log("SSE Stream closed.");
       
     } catch (err) {
       console.error(err);
