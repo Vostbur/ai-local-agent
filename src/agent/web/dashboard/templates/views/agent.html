@@ -1,15 +1,11 @@
 <div class="mx-auto max-w-4xl h-[calc(100vh-4rem)] flex flex-col">
-  <!-- Заголовок -->
   <div class="mb-4 shrink-0">
     <h1 class="text-2xl font-bold tracking-tight">Агент</h1>
     <p class="text-sm text-stone-500 dark:text-slate-400 mt-1">Задайте цель. Он может искать по документам, читать и создавать файлы.</p>
   </div>
 
-  <!-- Область чата -->
   <div id="chat-container" class="flex-1 rounded-xl border border-stone-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-800/50 flex flex-col overflow-hidden relative">
-    
     <div id="chat-log" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 chat-scroll scroll-smooth">
-      <!-- Приветственное сообщение (по умолчанию) -->
       <div id="welcome-message" class="flex gap-4">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
           <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
@@ -17,22 +13,21 @@
         <div class="flex-1 space-y-2">
           <p class="text-sm font-medium text-stone-900 dark:text-slate-100">Привет! Чем я могу помочь?</p>
           <div class="flex flex-wrap gap-2 mt-2">
-            <button onclick="fillInput('Найди в документах информацию про...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Поиск в документах</button>
-            <button onclick="fillInput('Сохрани заметку о...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Создать заметку</button>
-            <button onclick="fillInput('Сделай выжимку из документа...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Сделать выжимку</button>
+            <button type="button" onclick="fillInput('Найди в документах информацию про...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Поиск в документах</button>
+            <button type="button" onclick="fillInput('Сохрани заметку о...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Создать заметку</button>
+            <button type="button" onclick="fillInput('Сделай выжимку из документа...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Сделать выжимку</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Поле ввода -->
     <div class="shrink-0 border-t border-stone-200 bg-stone-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/30">
       <form id="agent-form" class="relative max-w-3xl mx-auto" onsubmit="event.preventDefault(); submitAgent();">
         <textarea id="agent-input" rows="1" placeholder="Напишите сообщение или задачу..."
                   class="w-full resize-none rounded-xl border border-stone-200 bg-white px-4 py-3 pr-14 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-900/50"
                   oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
         <button type="submit" id="agent-submit-btn"
-                class="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                class="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
         </button>
       </form>
@@ -41,47 +36,46 @@
 </div>
 
 <script>
-  // Восстановление истории чата при загрузке вкладки
   const savedHistory = localStorage.getItem('agent_chat_history');
   if (savedHistory) {
     const welcome = document.getElementById('welcome-message');
-    if (welcome) welcome.remove(); // Убираем приветствие, если есть история
-    const log = document.getElementById('chat-log');
-    log.innerHTML = savedHistory;
-    log.scrollTop = log.scrollHeight;
-  }
-
-  function saveChatHistory() {
+    if (welcome) welcome.remove();
     const log = document.getElementById('chat-log');
     if (log) {
-      const clone = log.cloneNode(true);
-      const typing = clone.querySelector('.typing-indicator');
-      if (typing) typing.closest('.flex.gap-4').remove(); 
-      
-      // Ограничиваем историю 20 последними сообщениями
-      const messages = clone.querySelectorAll('.flex.gap-4');
-      if (messages.length > 20) {
-          for (let i = 0; i < messages.length - 20; i++) {
-              messages[i].remove();
-          }
-      }
-      
-      try {
-          // Очищаем HTML перед сохранением, чтобы не сломать верстку при загрузке
-          localStorage.setItem('agent_chat_history', DOMPurify.sanitize(clone.innerHTML));
-      } catch (e) {
-          console.error('Ошибка сохранения истории', e);
-      }
+        log.innerHTML = savedHistory;
+        log.scrollTop = log.scrollHeight;
     }
   }
 
-  document.getElementById('agent-input').addEventListener('input', function() {
-    this.style.height = '';
-    this.style.height = this.scrollHeight + 'px';
-  });
+  function saveChatHistory() {
+    try {
+      const log = document.getElementById('chat-log');
+      if (log) {
+        const clone = log.cloneNode(true);
+        const typing = clone.querySelector('.typing-indicator');
+        if (typing && typing.closest('.flex.gap-4')) typing.closest('.flex.gap-4').remove(); 
+        
+        const messages = clone.querySelectorAll('.flex.gap-4');
+        if (messages.length > 20) {
+            for (let i = 0; i < messages.length - 20; i++) {
+                messages[i].remove();
+            }
+        }
+        
+        let html = clone.innerHTML;
+        if (typeof DOMPurify !== 'undefined') {
+            html = DOMPurify.sanitize(html);
+        }
+        localStorage.setItem('agent_chat_history', html);
+      }
+    } catch (e) {
+      console.error('Ошибка сохранения истории', e);
+    }
+  }
 
   function fillInput(text) {
     const input = document.getElementById('agent-input');
+    if (!input) return;
     input.value = text;
     input.focus();
     input.style.height = 'auto';
@@ -90,6 +84,7 @@
 
   function appendUserMessage(text) {
     const log = document.getElementById('chat-log');
+    if (!log) return;
     const div = document.createElement('div');
     div.className = 'flex gap-4 flex-row-reverse';
     div.innerHTML = `
@@ -99,12 +94,13 @@
       <div class="flex-1 max-w-[80%] rounded-2xl rounded-tr-sm bg-indigo-600 px-4 py-3 text-sm text-white shadow-sm whitespace-pre-wrap">${escapeHtml(text)}</div>
     `;
     log.appendChild(div);
-    scrollToBottom();
+    log.scrollTop = log.scrollHeight;
     saveChatHistory();
   }
 
   function appendAssistantMessage() {
     const log = document.getElementById('chat-log');
+    if (!log) return null;
     const div = document.createElement('div');
     div.className = 'flex gap-4';
     div.innerHTML = `
@@ -123,13 +119,8 @@
       </div>
     `;
     log.appendChild(div);
-    scrollToBottom();
-    return div;
-  }
-
-  function scrollToBottom() {
-    const log = document.getElementById('chat-log');
     log.scrollTop = log.scrollHeight;
+    return div;
   }
 
   function escapeHtml(text) {
@@ -139,6 +130,8 @@
   async function submitAgent() {
     const input = document.getElementById('agent-input');
     const btn = document.getElementById('agent-submit-btn');
+    if (!input || !btn) return;
+    
     const goal = input.value.trim();
     if (!goal) return;
 
@@ -152,11 +145,13 @@
     
     appendUserMessage(goal);
     const assistantDiv = appendAssistantMessage();
+    if (!assistantDiv) return;
+    
     const typingIndicator = assistantDiv.querySelector('.typing-indicator');
     const contentDiv = assistantDiv.querySelector('.content');
     
     let fullText = '';
-    let isFirstChunk = true; // Флаг для скрытия индикатора только при получении текста
+    let isFirstChunk = true;
     
     try {
       const res = await fetch('/ask', {
@@ -188,7 +183,6 @@
             const payloadStr = line.slice(6).trim();
             if (!payloadStr || payloadStr === '[DONE]') continue;
 
-            // Скрываем индикатор "печатает" только когда пришел первый кусок текста
             if (isFirstChunk) {
                 typingIndicator.classList.add('hidden');
                 contentDiv.classList.remove('hidden');
@@ -201,15 +195,21 @@
               if (payload.text) chunk = payload.text;
               else if (payload.content) chunk = payload.content;
               else if (payload.final) chunk = payload.final;
+              else if (payload.data) chunk = payload.data;
               else if (typeof payload === 'string') chunk = payload;
-
-              fullText += chunk;
-              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
-              scrollToBottom();
+              
+              if (typeof chunk === 'string') {
+                  fullText += chunk + "\n";
+                  contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
+                    ? DOMPurify.sanitize(marked.parse(fullText)) 
+                    : marked.parse(fullText);
+                  contentDiv.scrollTop = contentDiv.scrollHeight;
+              }
             } catch (e) {
-              fullText += payloadStr;
-              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
-              scrollToBottom();
+              fullText += payloadStr + "\n";
+              contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
+                ? DOMPurify.sanitize(marked.parse(fullText)) 
+                : marked.parse(fullText);
             }
           }
         }
