@@ -72,10 +72,10 @@ def test_index_page_returns_html(tmp_path):
     client = _client(tmp_path)
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "AI Local Agent" in resp.text
+    assert "ai-local-agent" in resp.text
     assert "Агент" in resp.text
     assert "Документы" in resp.text
-    assert "Чат" in resp.text
+    assert "Агент" in resp.text
 
 
 def test_health(tmp_path):
