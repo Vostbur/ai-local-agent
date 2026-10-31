@@ -20,7 +20,7 @@ def index_dir(cfg: Any) -> Path:
     return Path("data/index")
 
 def get_indexed_files(cfg: Any) -> dict[str, int]:
-    """Возвращает {путь: количество чанков}."""
+    """Возвращает {абсолютный_путь: количество чанков}."""
     idir = index_dir(cfg)
     if not idir.exists():
         return {}
@@ -28,14 +28,16 @@ def get_indexed_files(cfg: Any) -> dict[str, int]:
         store = VectorStore.load(idir)
         counts = {}
         for chunk in store.chunks:
-            counts[chunk.path] = counts.get(chunk.path, 0) + 1
+            # Приводим путь к абсолютному, чтобы избежать рассинхрона
+            abs_path = str(Path(chunk.path).resolve())
+            counts[abs_path] = counts.get(abs_path, 0) + 1
         return counts
     except Exception:
         return {}
 
 def list_files(cfg: Any) -> list[dict]:
     """Возвращает список файлов в documents_dir с их статусом индексации."""
-    ddir = documents_dir(cfg)
+    ddir = documents_dir(cfg).resolve()
     if not ddir.exists():
         return []
 
@@ -43,16 +45,19 @@ def list_files(cfg: Any) -> list[dict]:
     files = []
     
     for p in iter_document_files(ddir):
+        p = p.resolve()
         rel_path = str(p.relative_to(ddir)).replace("\\", "/")
+        abs_path_str = str(p)
+        
         stat = p.stat()
         files.append({
             "path": rel_path,
-            "full_path": str(p),
+            "full_path": abs_path_str,
             "name": p.name,
             "size": stat.st_size,
             "modified": stat.st_mtime,
-            "is_indexed": rel_path in indexed,
-            "chunks": indexed.get(rel_path, 0),
+            "is_indexed": abs_path_str in indexed,
+            "chunks": indexed.get(abs_path_str, 0),
             "suffix": p.suffix.lower().lstrip(".")
         })
     
