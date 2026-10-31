@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 
 from .base import ExtractedDocument, TextExtractor
+from .docx import DocxExtractor
+from .html import HtmlExtractor
 from .markdown import MarkdownExtractor
 from .pdf import PdfExtractor
 from .txt import TxtExtractor
@@ -40,3 +42,5 @@ def extract_text(path: Path) -> ExtractedDocument | None:
 register(MarkdownExtractor().supported_suffixes(), MarkdownExtractor())
 register(TxtExtractor.supported_suffixes, TxtExtractor())
 register(PdfExtractor().supported_suffixes(), PdfExtractor())
+register(DocxExtractor.SUFFIXES, DocxExtractor())
+register(HtmlExtractor.SUFFIXES, HtmlExtractor())

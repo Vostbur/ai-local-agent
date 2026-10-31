@@ -215,4 +215,8 @@ def create_app(
 
     app.mount("/notes", make_notes_app(config, logger))
 
+    from agent.web.documents.app import make_documents_app
+
+    app.mount("/documents", make_documents_app(config, logger))
+
     return app
