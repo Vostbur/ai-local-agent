@@ -20,6 +20,7 @@ class OllamaLLM:
         tools: list[ToolDefinition] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        keep_alive: str | int | None = -1,  # <-- ДОБАВЛЕНО: по умолчанию держать в памяти
     ) -> None:
         self.model = model
         self.base_url = base_url
@@ -27,6 +28,7 @@ class OllamaLLM:
         self.tools = tools or []
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.keep_alive = keep_alive  # <-- ДОБАВЛЕНО
 
     def chat(self, messages: list[dict]) -> LLMResponse:
         last = messages[-1] if messages else {}
@@ -57,6 +59,11 @@ class OllamaLLM:
             "messages": messages,
             "stream": False,
         }
+        
+        # <-- ДОБАВЛЕНО: передаем keep_alive, если он задан
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+
         if tools_payload is not None:
             payload["tools"] = tools_payload
             payload["tool_choice"] = "auto"
