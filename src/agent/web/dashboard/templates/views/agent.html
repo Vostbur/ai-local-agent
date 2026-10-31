@@ -45,7 +45,6 @@
 
 <script>
 (function() {
-  // Восстановление истории
   const savedHistory = localStorage.getItem('agent_chat_history');
   if (savedHistory) {
     document.getElementById('welcome-message').classList.add('hidden');
@@ -144,10 +143,13 @@
       </div>
       <div class="flex-1 max-w-[85%] rounded-2xl rounded-tl-sm bg-stone-100 px-4 py-3 text-sm text-stone-800 shadow-sm dark:bg-slate-800 dark:text-slate-200">
         <div class="prose prose-sm dark:prose-invert max-w-none break-words">
-          <div class="typing-indicator flex items-center gap-1 h-5">
-            <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
-            <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
-            <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
+          <div class="typing-indicator flex items-center gap-2 h-5 text-xs text-stone-500 dark:text-slate-400">
+            <div class="flex items-center gap-1">
+              <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
+              <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
+              <span class="dot h-1.5 w-1.5 rounded-full bg-stone-500 dark:bg-slate-400"></span>
+            </div>
+            <span class="status-text animate-pulse"></span>
           </div>
           <div class="content hidden"></div>
         </div>
@@ -180,6 +182,7 @@
     if (!assistantDiv) return;
     
     const typingIndicator = assistantDiv.querySelector('.typing-indicator');
+    const statusText = assistantDiv.querySelector('.status-text');
     const contentDiv = assistantDiv.querySelector('.content');
     
     let fullText = '';
@@ -196,7 +199,6 @@
       if (!res.ok) throw new Error('Ошибка при запуске агента');
       const data = await res.json();
       
-      console.log("SSE Stream started for task:", data.task_id);
       const streamRes = await fetch(`/stream/${data.task_id}`);
       if (!streamRes.ok) throw new Error('Ошибка стрима');
       
@@ -209,70 +211,47 @@
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        
-        // Разбиваем по \n или \r\n
         const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop(); // Оставляем неполную строку
+        buffer = lines.pop();
 
         for (const line of lines) {
-            let payloadStr = line.trim();
-            if (!payloadStr) continue;
-            
-            // Убираем префикс data: если он есть
-            if (payloadStr.startsWith('data:')) {
-                payloadStr = payloadStr.substring(5).trim();
-            }
-            
-            if (payloadStr === '[DONE]' || !payloadStr) continue;
-
-            console.log("RAW SSE Chunk:", payloadStr);
-
-            if (isFirstChunk) {
-                typingIndicator.classList.add('hidden');
-                contentDiv.classList.remove('hidden');
-                isFirstChunk = false;
-            }
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('event:')) continue;
 
             try {
-                const payload = JSON.parse(payloadStr);
-                let chunk = '';
-                
-                // Ищем текст в любых возможных полях JSON
-                if (typeof payload === 'string') chunk = payload;
-                else if (payload.text) chunk = payload.text;
-                else if (payload.content) chunk = payload.content;
-                else if (payload.final) chunk = payload.final;
-                else if (payload.data) {
-                    if (typeof payload.data === 'string') {
-                        try {
-                            const inner = JSON.parse(payload.data);
-                            chunk = inner.text || inner.content || payload.data;
-                        } catch(e) { chunk = payload.data; }
-                    } else {
-                        chunk = JSON.stringify(payload.data);
+                const payload = JSON.parse(trimmed);
+
+                if (payload.type === 'step') {
+                    // Показываем прогресс в индикаторе
+                    if (payload.event_type === 'tool_result') {
+                        statusText.textContent = `Выполнено: ${payload.tool_name} (${payload.count || 0})`;
+                    } else if (payload.event_type === 'llm_call') {
+                        statusText.textContent = 'Агент думает...';
+                    } else if (payload.event_type === 'final') {
+                        statusText.textContent = 'Формирую ответ...';
                     }
                 }
-                else if (payload.type === 'final' && payload.content) chunk = payload.content;
+                else if (payload.type === 'final') {
+                    if (isFirstChunk) {
+                        typingIndicator.classList.add('hidden');
+                        contentDiv.classList.remove('hidden');
+                        isFirstChunk = false;
+                    }
 
-                if (typeof chunk === 'string' && chunk.trim()) {
-                    fullText += chunk + "\n";
-                    contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
-                        ? DOMPurify.sanitize(marked.parse(fullText)) 
-                        : marked.parse(fullText);
-                    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+                    if (payload.final_answer) {
+                        fullText = payload.final_answer;
+                        contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
+                            ? DOMPurify.sanitize(marked.parse(fullText)) 
+                            : marked.parse(fullText);
+                        if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+                    }
                 }
             } catch (e) {
-                // Если не JSON, выводим как есть
-                fullText += payloadStr + "\n";
-                contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
-                    ? DOMPurify.sanitize(marked.parse(fullText)) 
-                    : marked.parse(fullText);
-                if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+                // Пропускаем строки, которые не являются валидным JSON
+                console.warn("Skipped non-JSON SSE line:", trimmed);
             }
         }
       }
-      
-      console.log("SSE Stream closed.");
       
     } catch (err) {
       console.error(err);
