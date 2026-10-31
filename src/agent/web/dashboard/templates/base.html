@@ -39,6 +39,17 @@
         }
       });
     });
+
+    // Сохраняем историю чата перед тем, как HTMX уничтожит текущую вкладку
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.addEventListener('htmx:beforeSwap', (evt) => {
+        if (evt.detail.target.id === 'view-container') {
+          if (typeof window.saveChatHistory === 'function') {
+            window.saveChatHistory();
+          }
+        }
+      });
+    });
   </script>
 </head>
 <body class="min-h-screen bg-stone-50 text-stone-900 antialiased dark:bg-slate-900 dark:text-slate-100"
@@ -59,7 +70,6 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-3 space-y-1">
-      <!-- Навигация (добавлен type="button") -->
       <button type="button" hx-get="/views/agent" hx-target="#view-container" hx-swap="innerHTML"
               class="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-stone-600 transition hover:bg-stone-100 dark:text-slate-300 dark:hover:bg-slate-800 [&.active]:bg-indigo-50 [&.active]:text-indigo-700 dark:[&.active]:bg-indigo-500/10 dark:[&.active]:text-indigo-300"
               onclick="setActive(this)">
