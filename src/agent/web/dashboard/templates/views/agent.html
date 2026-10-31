@@ -9,7 +9,7 @@
   <div id="chat-container" class="flex-1 rounded-xl border border-stone-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-800/50 flex flex-col overflow-hidden relative">
     
     <div id="chat-log" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 chat-scroll scroll-smooth">
-      <!-- Приветственное сообщение (по умолчанию, если истории нет) -->
+      <!-- Приветственное сообщение (по умолчанию) -->
       <div id="welcome-message" class="flex gap-4">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
           <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
@@ -32,7 +32,7 @@
                   class="w-full resize-none rounded-xl border border-stone-200 bg-white px-4 py-3 pr-14 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-900/50"
                   oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
         <button type="submit" id="agent-submit-btn"
-                class="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                class="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
         </button>
       </form>
@@ -54,11 +54,24 @@
   function saveChatHistory() {
     const log = document.getElementById('chat-log');
     if (log) {
-      // Исключаем индикатор "печатает", если он есть, чтобы он не застывал при перезагрузке
       const clone = log.cloneNode(true);
       const typing = clone.querySelector('.typing-indicator');
       if (typing) typing.closest('.flex.gap-4').remove(); 
-      localStorage.setItem('agent_chat_history', clone.innerHTML);
+      
+      // Ограничиваем историю 20 последними сообщениями
+      const messages = clone.querySelectorAll('.flex.gap-4');
+      if (messages.length > 20) {
+          for (let i = 0; i < messages.length - 20; i++) {
+              messages[i].remove();
+          }
+      }
+      
+      try {
+          // Очищаем HTML перед сохранением, чтобы не сломать верстку при загрузке
+          localStorage.setItem('agent_chat_history', DOMPurify.sanitize(clone.innerHTML));
+      } catch (e) {
+          console.error('Ошибка сохранения истории', e);
+      }
     }
   }
 
@@ -129,7 +142,6 @@
     const goal = input.value.trim();
     if (!goal) return;
 
-    // Убираем приветствие при первом сообщении
     const welcome = document.getElementById('welcome-message');
     if (welcome) welcome.remove();
 
@@ -144,6 +156,7 @@
     const contentDiv = assistantDiv.querySelector('.content');
     
     let fullText = '';
+    let isFirstChunk = true; // Флаг для скрытия индикатора только при получении текста
     
     try {
       const res = await fetch('/ask', {
@@ -155,7 +168,6 @@
       if (!res.ok) throw new Error('Ошибка при запуске агента');
       const data = await res.json();
       
-      // Используем fetch вместо EventSource для надежного чтения потока
       const streamRes = await fetch(`/stream/${data.task_id}`);
       if (!streamRes.ok) throw new Error('Ошибка стрима');
       
@@ -163,21 +175,25 @@
       const decoder = new TextDecoder();
       let buffer = '';
 
-      typingIndicator.classList.add('hidden');
-      contentDiv.classList.remove('hidden');
-
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop(); // Оставляем последнюю неполную строку
+        buffer = lines.pop();
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const payloadStr = line.slice(6).trim();
             if (!payloadStr || payloadStr === '[DONE]') continue;
+
+            // Скрываем индикатор "печатает" только когда пришел первый кусок текста
+            if (isFirstChunk) {
+                typingIndicator.classList.add('hidden');
+                contentDiv.classList.remove('hidden');
+                isFirstChunk = false;
+            }
 
             try {
               const payload = JSON.parse(payloadStr);
@@ -188,26 +204,31 @@
               else if (typeof payload === 'string') chunk = payload;
 
               fullText += chunk;
-              contentDiv.innerHTML = marked.parse(fullText);
+              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
               scrollToBottom();
             } catch (e) {
               fullText += payloadStr;
-              contentDiv.innerHTML = marked.parse(fullText);
+              contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(fullText));
               scrollToBottom();
             }
           }
         }
       }
       
-      saveChatHistory(); // Сохраняем историю после завершения ответа
-      
     } catch (err) {
       console.error(err);
-      typingIndicator.classList.add('hidden');
-      contentDiv.classList.remove('hidden');
-      contentDiv.innerHTML = `<span class="text-red-500">Ошибка: ${err.message}</span>`;
-      saveChatHistory();
+      if (isFirstChunk) {
+          typingIndicator.classList.add('hidden');
+          contentDiv.classList.remove('hidden');
+      }
+      contentDiv.innerHTML += `<br><span class="text-red-500">Ошибка: ${err.message}</span>`;
     } finally {
+      if (isFirstChunk) {
+          typingIndicator.classList.add('hidden');
+          contentDiv.classList.remove('hidden');
+          contentDiv.innerHTML = '<span class="text-stone-400 italic">Агент завершил работу без текстового ответа.</span>';
+      }
+      saveChatHistory();
       input.disabled = false;
       btn.disabled = false;
       input.focus();

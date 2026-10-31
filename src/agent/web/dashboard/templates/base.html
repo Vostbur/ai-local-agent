@@ -8,8 +8,9 @@
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <script>tailwind.config = { darkMode: 'class' };</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- Подключаем Marked.js для рендеринга Markdown -->
+  <!-- Подключаем Marked.js для рендеринга Markdown и DOMPurify для безопасности -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   
   <script defer src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
