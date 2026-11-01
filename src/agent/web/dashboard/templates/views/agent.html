@@ -215,14 +215,21 @@
         buffer = lines.pop();
 
         for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('event:')) continue;
+            let trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('event:')) continue;
+            
+            // Отрезаем стандартный префикс SSE, если он есть
+            if (trimmed.startsWith('data:')) {
+                trimmed = trimmed.substring(5).trim();
+            }
+
+            if (!trimmed) continue;
 
             try {
                 const payload = JSON.parse(trimmed);
 
                 if (payload.type === 'step') {
-                    // Показываем прогресс в индикаторе
                     if (payload.event_type === 'tool_result') {
                         statusText.textContent = `Выполнено: ${payload.tool_name} (${payload.count || 0})`;
                     } else if (payload.event_type === 'llm_call') {
@@ -247,7 +254,6 @@
                     }
                 }
             } catch (e) {
-                // Пропускаем строки, которые не являются валидным JSON
                 console.warn("Skipped non-JSON SSE line:", trimmed);
             }
         }
