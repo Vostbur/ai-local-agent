@@ -43,6 +43,10 @@
   </div>
 </div>
 
+<!-- Локальные библиотеки -->
+<script src="/static/marked.min.js"></script>
+<script src="/static/purify.min.js"></script>
+
 <script>
 (function() {
   const savedHistory = localStorage.getItem('agent_chat_history');
@@ -185,6 +189,17 @@
     const statusText = assistantDiv.querySelector('.status-text');
     const contentDiv = assistantDiv.querySelector('.content');
     
+    // --- Таймер ---
+    let elapsedSeconds = 0;
+    statusText.textContent = 'Агент думает...';
+    const timerInterval = setInterval(() => {
+        elapsedSeconds++;
+        const mins = Math.floor(elapsedSeconds / 60);
+        const secs = elapsedSeconds % 60;
+        statusText.textContent = `Агент думает... ${mins > 0 ? mins + 'м ' : ''}${secs}с`;
+    }, 1000);
+    // ---------------
+
     let fullText = '';
     let isFirstChunk = true;
     const chatLog = document.getElementById('chat-log');
@@ -211,23 +226,30 @@
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop();
+        
+        // Разделяем по двойному переносу (граница SSE-события)
+        const parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop(); // Оставляем незавершенную часть
 
-        for (const line of lines) {
-            let trimmed = line.trim();
-            if (!trimmed) continue;
-            if (trimmed.startsWith('event:')) continue;
+        for (const part of parts) {
+            const lines = part.split(/\r?\n/);
+            let dataStr = '';
             
-            // Отрезаем стандартный префикс SSE, если он есть
-            if (trimmed.startsWith('data:')) {
-                trimmed = trimmed.substring(5).trim();
+            for (const line of lines) {
+                if (line.startsWith('event:')) continue;
+                if (line.startsWith('data:')) {
+                    dataStr += line.substring(5).trim();
+                } else if (line.startsWith('{')) {
+                    // Фоллбэк, если бэкенд шлет сырой JSON без data:
+                    dataStr += line.trim();
+                }
             }
 
-            if (!trimmed) continue;
+            if (!dataStr) continue;
 
             try {
-                const payload = JSON.parse(trimmed);
+                // УБРАНЫ ОПАСНЫЕ REPLACE. Бэкенд уже отдает валидный JSON через json.dumps()
+                const payload = JSON.parse(dataStr);
 
                 if (payload.type === 'step') {
                     if (payload.event_type === 'tool_result') {
@@ -254,12 +276,13 @@
                     }
                 }
             } catch (e) {
-                console.warn("Skipped non-JSON SSE line:", trimmed);
+                console.warn("Skipped non-JSON SSE line:", dataStr);
             }
         }
       }
       
     } catch (err) {
+      clearInterval(timerInterval);
       console.error(err);
       if (isFirstChunk) {
           typingIndicator.classList.add('hidden');
@@ -267,6 +290,7 @@
       }
       contentDiv.innerHTML += `<br><span class="text-red-500">Ошибка: ${err.message}</span>`;
     } finally {
+      clearInterval(timerInterval);
       if (isFirstChunk) {
           typingIndicator.classList.add('hidden');
           contentDiv.classList.remove('hidden');

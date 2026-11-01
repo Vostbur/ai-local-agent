@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -10,6 +11,7 @@ templates = Jinja2Templates(directory=BASE / "templates")
 
 def make_dashboard_app(config: Any = None, logger: Any = None) -> FastAPI:
     app = FastAPI(title="Dashboard UI", docs_url=None, redoc_url=None, openapi_url=None)
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     def _render(request: Request, name: str, extra: dict | None = None) -> HTMLResponse:
         ctx = {"request": request, **(extra or {})}
