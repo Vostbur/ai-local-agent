@@ -1,21 +1,21 @@
 """Orchestrator — цикл plan-execute для агента."""
-
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from src.agent.llm import LLMClient
 from src.agent.registry import ToolRegistry
 
 SYSTEM_PROMPT = (
-    "Ты — локальный ассистент с инструментами. "
-    "Вызывай инструмент только если это необходимо для достижения цели. "
-    "После успешного выполнения инструмента проверь, достигнута ли цель. "
-    "Если да — дай финальный ответ обычным текстом, БЕЗ вызова инструментов. "
-    "НИКОГДА не вызывай один и тот же инструмент с одинаковыми аргументами дважды: "
+    "Ты — локальный ассистент с инструментами.  "
+    "Вызывай инструмент только если это необходимо для достижения цели.  "
+    "После успешного выполнения инструмента проверь, достигнута ли цель.  "
+    "Если да — дай финальный ответ обычным текстом, БЕЗ вызова инструментов.  "
+    "НИКОГДА не вызывай один и тот же инструмент с одинаковыми аргументами дважды:  "
     "если инструмент уже вернул результат, используй его и двигайся дальше.\n\n"
     "Инструменты:\n"
     "- search_documents — поиск в документах пользователя (README, статьи, файлы проекта).\n"
@@ -27,10 +27,10 @@ SYSTEM_PROMPT = (
     "- delete_note — удалить заметку (перемещает в корзину, не стирает безвозвратно).\n"
     "- move_note — переместить заметку в другую категорию или в корень.\n"
     "- list_categories — список категорий заметок и число заметок в каждой.\n\n"
-    "ВАЖНО: почти любой вопрос про проект, агент, README, установку, "
-    "требования, возможности, статьи, код, лицензию — это вопрос про документы. "
-    "ВСЕГДА используй search_documents, даже если вопрос выглядит как общий "
-    "(\"какая версия Python?\", \"как установить?\", \"что умеет?\").\n\n"
+    "ВАЖНО: почти любой вопрос про проект, агент, README, установку,  "
+    "требования, возможности, статьи, код, лицензию — это вопрос про документы.  "
+    "ВСЕГДА используй search_documents, даже если вопрос выглядит как общий  "
+    "(«какая версия Python?», «как установить?», «что умеет?»).\n\n"
     "Примеры (это образец мышления, а не формат ответа):\n"
     "- «Какие требования к ОЗУ?» → search_documents(query=\"требования оперативная память\")\n"
     "- «Какая версия Python нужна?» → search_documents(query=\"версия Python\")\n"
@@ -42,40 +42,40 @@ SYSTEM_PROMPT = (
     "- «Что в моих заметках про X?» → search_notes(query=\"X\")\n"
     "- «Сохрани заметку X с текстом Y» → save_note(title=\"X\", content=\"Y\")\n"
     "- «Привет» → final(\"Привет! Чем помочь?\") — без инструментов\n\n"
-    "После search_documents: посмотри на возвращённые фрагменты и ответь "
-    "ТОЛЬКО по ним. Если в фрагментах нет прямого ответа — честно скажи "
+    "После search_documents: посмотри на возвращённые фрагменты и ответь  "
+    "ТОЛЬКО по ним. Если в фрагментах нет прямого ответа — честно скажи  "
     "«в документах это не указано». Не выдумывай факты и цифры.\n\n"
     "Инструменты работы с документами:\n"
     "- read_document(path) — прочитать шаблон или документ целиком (или первые N символов).\n"
     "- write_document(title, content) — создать новый Markdown-документ.\n\n"
     "Изменение заметок (ОБЯЗАТЕЛЬНО):\n"
-    "Заметки у каждого пользователя свои, и ты НЕ знаешь их пути наперёд. "
-    "update_note, delete_note и move_note принимают аргумент 'path' — ПУТЬ к файлу "
-    "заметки относительно data/notes/ (формат: 'категория/имя_файла'), "
+    "Заметки у каждого пользователя свои, и ты НЕ знаешь их пути наперёд.  "
+    "update_note, delete_note и move_note принимают аргумент 'path' — ПУТЬ к файлу  "
+    "заметки относительно data/notes/ (формат: 'категория/имя_файла'),  "
     "а НЕ название заметки. НЕ угадывай путь по названию.\n"
-    "Если у тебя ещё нет пути к заметке из результата инструмента в текущем диалоге — "
-    "сначала вызови list_notes или read_notes, найди нужную заметку и возьми её путь "
+    "Если у тебя ещё нет пути к заметке из результата инструмента в текущем диалоге —  "
+    "сначала вызови list_notes или read_notes, найди нужную заметку и возьми её путь  "
     "из результата, и только потом вызывай update_note, delete_note или move_note.\n\n"
     "Выбор инструмента для заметок (ОБЯЗАТЕЛЬНО):\n"
-    "ЗАГОЛОВОК или НАЗВАНИЕ («найди заметку с заголовком», «есть ли заметка под "
+    "ЗАГОЛОВОК или НАЗВАНИЕ («найди заметку с заголовком», «есть ли заметка под  "
     "названием», «покажи заметку с названием») — используй read_notes.\n"
-    "СОДЕРЖИМОЕ заметки («в какой заметке упоминается», «что я писал про», «найди "
+    "СОДЕРЖИМОЕ заметки («в какой заметке упоминается», «что я писал про», «найди  "
     "текст про») — используй search_notes.\n"
-    "КАТЕГОРИЯ или список («заметки в категории», «покажи все заметки») — "
-    "используй list_notes.\n\n"    
+    "КАТЕГОРИЯ или список («заметки в категории», «покажи все заметки») —  "
+    "используй list_notes.\n\n"
     "Правило для генерации документа по шаблону (ОБЯЗАТЕЛЬНО):\n"
     "1. Вызови read_document(path=...) — увидишь структуру шаблона.\n"
-    "2. Сразу после этого ВЫЗОВИ инструмент write_document через tool_call. "
-    "НЕ пиши имя инструмента или его аргументы текстом в ответе — "
+    "2. Сразу после этого ВЫЗОВИ инструмент write_document через tool_call.  "
+    "НЕ пиши имя инструмента или его аргументы текстом в ответе —  "
     "это ошибка. Инструмент вызывается только через tool_call.\n"
-    "3. Заполни каждую секцию НОВЫМ содержанием по теме пользователя. "
-    "НЕ копируй placeholder-текст шаблона («Краткое описание проекта», "
+    "3. Заполни каждую секцию НОВЫМ содержанием по теме пользователя.  "
+    "НЕ копируй placeholder-текст шаблона («Краткое описание проекта»,  "
     "«Список целей», «Что достигнуто», «Итоги»).\n"
     "4. Заголовок — из задачи пользователя, НЕ из шаблона.\n"
-    "5. content должен начинаться с «## » (первый раздел шаблона), "
+    "5. content должен начинаться с «## » (первый раздел шаблона),  "
     "НЕ с «# {title}» — write_document добавит заголовок сам.\n"
     "6. Отвечай на русском.\n\n"
-    "Не спрашивай подтверждения. Не показывай структуру в тексте ответа. "
+    "Не спрашивай подтверждения. Не показывай структуру в тексте ответа.  "
     "Не пиши имя инструмента в тексте — вызывай его."
 )
 
@@ -86,15 +86,35 @@ def _summarize_for_log(result: object) -> str:
     """Краткое описание результата инструмента для лога.
 
     Не логирует содержимое списков (preview/snippet), чтобы в лог
-    не попадали тексты заметок. Для ``Path`` оставляет путь.
+    не попадали тексты заметок. Для Path оставляет путь.
     """
     if isinstance(result, Path):
-        return str(result)
+        return result.as_posix()
     if isinstance(result, str) and len(result) <= 200:
         return result
     if isinstance(result, list):
         return f"list[{len(result)}]"
     return f"{type(result).__name__}, len={len(str(result))}"
+
+
+def _serialize_tool_result(result: object) -> Any:
+    """Рекурсивно сериализовать результат инструмента в JSON-совместимый формат.
+
+    Преобразует Path в строки с прямыми слэшами (контракт проекта),
+    словари и списки обходит рекурсивно.
+    Гарантирует, что результат может быть сериализован через json.dumps
+    без ошибок и без питоновских литералов (None, одинарные кавычки).
+    """
+    if result is None or isinstance(result, (str, int, float, bool)):
+        return result
+    if isinstance(result, Path):
+        return result.as_posix()
+    if isinstance(result, dict):
+        return {str(k): _serialize_tool_result(v) for k, v in result.items()}
+    if isinstance(result, (list, tuple, set)):
+        return [_serialize_tool_result(item) for item in result]
+    # Для остальных типов (например, datetime) преобразуем в строку
+    return str(result)
 
 
 class MaxStepsExceeded(Exception):
@@ -107,11 +127,11 @@ class StepEvent:
 
     Атрибуты:
         step: номер шага (1-based).
-        event_type: ``"llm_call"`` (перед вызовом LLM), ``"tool_result"``
-            (после выполнения инструмента), ``"final"`` (LLM вернула финал).
-        tool_name: имя инструмента (для ``tool_result``).
-        status: для ``tool_result`` — ``"SUCCESS"``/``"ERROR"``/``"SKIPPED"``;
-            для ``final`` — ``"ok"`` или ``"empty"``.
+        event_type: "llm_call" (перед вызовом LLM), "tool_result"
+            (после выполнения инструмента), "final" (LLM вернула финал).
+        tool_name: имя инструмента (для tool_result).
+        status: для tool_result — "SUCCESS"/"ERROR"/"SKIPPED";
+            для final — "ok" или "empty".
         count: число элементов, если результат инструмента — список.
     """
 
@@ -128,7 +148,7 @@ class OrchestratorResult:
     final_answer: str | None
     steps_used: int
     error: str | None = None
-    tool_results: list[str] = field(default_factory=list)
+    tool_results: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -170,12 +190,13 @@ class Orchestrator:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": goal},
         ]
-        tool_results: list[str] = []
+        tool_results: list[Any] = []
         executed_calls: set[str] = set()
         failed_calls: dict[str, int] = {}
 
         for step in range(1, self.max_steps + 1):
             emit(StepEvent(step=step, event_type="llm_call"))
+
             response = self.llm.chat(messages)
             self.logger.info("step=%d type=%s", step, response.type)
 
@@ -196,6 +217,7 @@ class Orchestrator:
                         error="empty final answer",
                         tool_results=tool_results,
                     )
+
                 self.logger.info("final: %s", response.content)
                 emit(
                     StepEvent(step=step, event_type="final", status="ok")
@@ -213,6 +235,7 @@ class Orchestrator:
                     **(response.tool_arguments or {}),
                     **extra,
                 }
+
                 call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
 
                 if call_key in executed_calls:
@@ -221,6 +244,7 @@ class Orchestrator:
                         "was not executed again because the same call already succeeded"
                     )
                     self.logger.info("repeated tool call skipped: %s", call_key)
+
                 elif failed_calls.get(call_key, 0) >= self.max_tool_failures:
                     tool_status = "ERROR"
                     result = (
@@ -233,6 +257,7 @@ class Orchestrator:
                         self.max_tool_failures,
                         call_key,
                     )
+
                 else:
                     try:
                         result = self.registry.call(response.tool_name, **arguments)
@@ -248,7 +273,8 @@ class Orchestrator:
                             failed_calls[call_key],
                         )
                     else:
-                        tool_results.append(str(result))
+                        # Сериализуем результат в JSON-совместимый формат
+                        tool_results.append(_serialize_tool_result(result))
                         self.logger.info(
                             "tool %s -> %s",
                             response.tool_name,
@@ -269,7 +295,7 @@ class Orchestrator:
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": (f"tool_call: {response.tool_name}({display_args})"),
+                        "content": f"tool_call: {response.tool_name}({display_args})",
                     }
                 )
 
