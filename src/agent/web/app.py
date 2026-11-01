@@ -1,20 +1,20 @@
 """FastAPI-приложение для локального веб-интерфейса агента.
-
 Запуск: `python -m agent web` (порт 8000, только localhost).
 """
-
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import threading
+import time
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.agent.config import AppConfig
@@ -24,21 +24,26 @@ from src.agent.service import AgentService
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-
 class AskRequest(BaseModel):
     goal: str
-
 
 class IndexRequest(BaseModel):
     reset: bool = False
     documents: str | None = None
 
-
 @dataclass
 class TaskState:
     """Хранилище состояния задачи для поддержки переподключений."""
     events: list = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
+    finished_at: float | None = None
 
+    def is_finished(self) -> bool:
+        return bool(self.events) and self.events[-1] is None
+
+    def mark_finished(self):
+        if self.finished_at is None:
+            self.finished_at = time.time()
 
 def _format_sse(event: StepEvent | FinalEvent | None) -> str:
     """Сериализовать событие в SSE-блок."""
@@ -63,8 +68,8 @@ def _format_sse(event: StepEvent | FinalEvent | None) -> str:
         }
     else:
         payload = {"type": "unknown"}
-    return f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
+    return f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 def _run_task(
     task_id: str,
@@ -77,6 +82,8 @@ def _run_task(
     """Фоновый поток: прогнать задачу, сохранить события в TaskState."""
     def add_event(ev):
         state.events.append(ev)
+        if ev is None:
+            state.mark_finished()
 
     try:
         events = service.ask(goal) if use_tools else service.ask_plain(goal)
@@ -96,13 +103,42 @@ def _run_task(
         loop.call_soon_threadsafe(add_event, None)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Фоновая очистка зависших и завершенных задач для предотвращения утечки памяти."""
+    async def cleanup_loop():
+        while True:
+            await asyncio.sleep(60)  # Проверка каждую минуту
+            now = time.time()
+            keys_to_delete = []
+            
+            for tid, st in list(app.state.tasks.items()):
+                if st.is_finished():
+                    # Держим завершенные задачи 5 минут для возможных поздних переподключений
+                    if now - st.finished_at > 300:
+                        keys_to_delete.append(tid)
+                else:
+                    # Удаляем брошенные или зависшие задачи через 2 часа
+                    if now - st.created_at > 7200:
+                        keys_to_delete.append(tid)
+                        
+            for tid in keys_to_delete:
+                app.state.tasks.pop(tid, None)
+
+    cleanup_task = asyncio.create_task(cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+
+
 def create_app(
     config: AppConfig,
     logger: logging.Logger,
     service: AgentService | None = None,
 ) -> FastAPI:
     """Собрать FastAPI-приложение."""
-    app = FastAPI(title="AI Local Agent", docs_url="/api/docs")
+    app = FastAPI(title="AI Local Agent", docs_url="/api/docs", lifespan=lifespan)
     app.state.config = config
     app.state.logger = logger
     app.state.service = service or AgentService(config, logger)
@@ -118,7 +154,6 @@ def create_app(
         task_id = str(uuid.uuid4())
         state = TaskState()
         app.state.tasks[task_id] = state
-        
         threading.Thread(
             target=_run_task,
             args=(
@@ -168,13 +203,13 @@ def create_app(
                         last_idx += 1
                     else:
                         # Если задача завершена и больше событий не будет
-                        if last_idx > 0 and state.events[-1] is None:
+                        if last_idx > 0 and state.is_finished():
                             return
                         # Простой опрос раз в 100 мс
                         await asyncio.sleep(0.1)
             finally:
-                # Если задача полностью завершена, удаляем ее из памяти
-                if state.events and state.events[-1] is None:
+                # Если клиент отключился после завершения задачи, удаляем её сразу
+                if state.is_finished():
                     app.state.tasks.pop(task_id, None)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
