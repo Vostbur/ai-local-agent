@@ -1,18 +1,23 @@
 """Список заметок: все или по категории."""
-
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import iter_md_files, load_note, validate_category, category_of
+from src.agent.tools._search import (
+    category_of,
+    iter_md_files,
+    load_note,
+    validate_category,
+)
 
 
 def list_notes(
     notes_dir: Path,
     category: str | None = None,
     max_results: int | None = 50,
+    trash_dir: Path | None = None,
 ) -> list[dict]:
     """Список заметок, опционально из одной категории.
 
@@ -20,6 +25,7 @@ def list_notes(
         notes_dir: Директория с заметками.
         category: Категория (подпапка). ``None`` или ``""`` — все заметки.
         max_results: Максимум результатов. ``None`` — дефолт 50; ``<= 0`` — пусто.
+        trash_dir: Директория корзины для исключения из результатов.
 
     Returns:
         Список словарей: path (относительный от notes_dir), title,
@@ -37,7 +43,7 @@ def list_notes(
         return []
 
     results: list[dict] = []
-    for path in iter_md_files(base):
+    for path in iter_md_files(base, trash_dir=trash_dir):
         note = load_note(path)
         if note is None:
             continue
@@ -92,4 +98,5 @@ LIST_NOTES_TOOL: ToolDefinition = ToolDefinition(
     },
     func=list_notes,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

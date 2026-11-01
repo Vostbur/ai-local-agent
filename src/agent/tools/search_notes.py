@@ -1,5 +1,4 @@
 """Поиск заметок по содержимому тела документа."""
-
 from __future__ import annotations
 
 import re
@@ -7,11 +6,19 @@ from pathlib import Path
 
 from src.agent.registry import ToolDefinition
 from src.agent.stem import stem
-from src.agent.tools._search import category_of, find_match_with_kind, iter_md_files, load_note
+from src.agent.tools._search import (
+    category_of,
+    find_match_with_kind,
+    iter_md_files,
+    load_note,
+)
 
 
 def search_notes(
-    query: str, notes_dir: Path, max_results: int | None = 5
+    query: str,
+    notes_dir: Path,
+    max_results: int | None = 5,
+    trash_dir: Path | None = None,
 ) -> list[dict]:
     """Поиск Markdown-заметок по вхождению запроса в тело документа.
 
@@ -21,6 +28,7 @@ def search_notes(
         max_results: Максимальное число результатов. ``None`` — дефолт 5;
             ``<= 0`` — вернуть пустой список. Чтение прекращается,
             как только найдено нужное число совпадений.
+        trash_dir: Директория корзины для исключения из поиска.
 
     Returns:
         Список словарей с полями path, title, snippet, matches.
@@ -34,8 +42,7 @@ def search_notes(
         return []
 
     results: list[dict] = []
-
-    for path in iter_md_files(notes_dir):
+    for path in iter_md_files(notes_dir, trash_dir=trash_dir):
         note = load_note(path)
         if note is None:
             continue
@@ -48,7 +55,6 @@ def search_notes(
             continue
 
         start, _end, kind = res
-
         if kind == "exact":
             matches = body.lower().count(query.lower())
         else:  # kind == "stem"
@@ -68,6 +74,7 @@ def search_notes(
             prev_line_start = body.rfind("\n", 0, line_start - 1) + 1
             context_lines.append(body[prev_line_start:line_start])
             has_prev = True
+
         context_lines.append(body[line_start:line_end])
 
         has_next = False
@@ -80,7 +87,6 @@ def search_notes(
             has_next = next_line_end < len(body)
 
         snippet = " ".join(context_lines).strip()
-
         ellipsis_prefix = "…" if has_prev else ""
         trimmed_right = len(snippet) > 300
         if trimmed_right:
@@ -108,8 +114,8 @@ SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
     description=(
         "Search the user's PERSONAL NOTES (in data/notes/, created via save_note) "
         "— NOT documents, README, or project files. Use only when the user "
-        "explicitly asks about their own notes: \"мои заметки\", \"что я записал\", "
-        "\"найди заметку\", \"my notes\", \"what did I write\". "
+        "explicitly asks about their own notes: 'мои заметки', 'что я записал', "
+        "'найди заметку', 'my notes', 'what did I write'. "
         "For documents, README, articles, project files — use search_documents. "
         "Returns path, title, snippet, matches. Each result also includes "
         "category (folder name, or null for uncategorized notes); path is "
@@ -133,4 +139,5 @@ SEARCH_NOTES_TOOL: ToolDefinition = ToolDefinition(
     },
     func=search_notes,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

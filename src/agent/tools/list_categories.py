@@ -1,5 +1,4 @@
 """Список категорий заметок (подпапок notes_dir) с числом заметок."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,12 +7,16 @@ from src.agent.registry import ToolDefinition
 from src.agent.tools._search import iter_md_files
 
 
-def list_categories(notes_dir: Path) -> list[dict]:
+def list_categories(notes_dir: Path, trash_dir: Path | None = None) -> list[dict]:
     """Список категорий заметок.
 
     Категория — подпапка ``notes_dir`` верхнего уровня. Отдельной строкой
     возвращается число заметок без категории (в корне ``notes_dir``);
     имя такой «категории» — пустая строка.
+
+    Args:
+        notes_dir: Директория с заметками.
+        trash_dir: Директория корзины для исключения из подсчёта.
 
     Returns:
         Список словарей ``{"name": ..., "note_count": ...}``.
@@ -30,7 +33,10 @@ def list_categories(notes_dir: Path) -> list[dict]:
 
     for subdir in sorted(p for p in notes_dir.iterdir() if p.is_dir()):
         results.append(
-            {"name": subdir.name, "note_count": len(iter_md_files(subdir))}
+            {
+                "name": subdir.name,
+                "note_count": len(iter_md_files(subdir, trash_dir=trash_dir)),
+            }
         )
 
     return results
@@ -48,4 +54,5 @@ LIST_CATEGORIES_TOOL: ToolDefinition = ToolDefinition(
     parameters={"type": "object", "properties": {}, "required": []},
     func=list_categories,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

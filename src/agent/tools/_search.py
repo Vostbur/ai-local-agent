@@ -162,7 +162,6 @@ def validate_category(category: str | None) -> str | None:
         raise ValueError(f"Invalid category name: {category!r}")
 
     if safe != category.strip().lower().replace(" ", "_"):
-        # Имя содержит запрещённые символы, которые были удалены
         raise ValueError(f"Invalid category name: {category!r}")
 
     return safe
@@ -243,7 +242,7 @@ def ensure_note_file(candidate: Path, path_repr: str) -> None:
     if not candidate.is_file():
         raise FileNotFoundError(
             f"Note not found: {path_repr!r}. The 'path' argument must be a "
-            f"file path relative to data/notes/ (e.g. 'категория/имя_файла.md'), "
+            f"file path relative to data/notes/ (e.g. 'категория/имя_файла'), "
             f"NOT the note title. If you only know the title, call list_notes "
             f"or read_notes first to get the path, then retry."
         )

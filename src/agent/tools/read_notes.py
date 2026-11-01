@@ -1,17 +1,22 @@
 """Чтение и фильтрация заметок по названию."""
-
 from __future__ import annotations
 
 from pathlib import Path
 
 from src.agent.registry import ToolDefinition
-from src.agent.tools._search import category_of, find_match, iter_md_files, load_note
+from src.agent.tools._search import (
+    category_of,
+    find_match,
+    iter_md_files,
+    load_note,
+)
 
 
 def read_notes(
     query: str = "",
     notes_dir: Path | None = None,
     max_results: int | None = 50,
+    trash_dir: Path | None = None,
 ) -> list[dict]:
     """Прочитать заметки из директории и отфильтровать по запросу.
 
@@ -21,6 +26,7 @@ def read_notes(
             Если не указана — используется ``Path("data/notes")``.
         max_results: Максимальное число возвращаемых заметок.
             ``None`` — использовать дефолт 50; ``<= 0`` — вернуть пустой список.
+        trash_dir: Директория корзины для исключения из результатов.
 
     Returns:
         Список словарей с полями path (относительный от notes_dir),
@@ -30,7 +36,6 @@ def read_notes(
         max_results = 50
     if max_results <= 0:
         return []
-
     if notes_dir is None:
         notes_dir = Path("data/notes")
 
@@ -40,7 +45,7 @@ def read_notes(
     results: list[dict] = []
     stripped_query = query.strip()
 
-    for path in iter_md_files(notes_dir):
+    for path in iter_md_files(notes_dir, trash_dir=trash_dir):
         note = load_note(path)
         if note is None:
             continue
@@ -63,7 +68,6 @@ def read_notes(
                 "preview": body[:200].replace("\n", " ").strip(),
             }
         )
-
         if len(results) >= max_results:
             break
 
@@ -73,9 +77,9 @@ def read_notes(
 READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
     name="read_notes",
     description=(
-        "List notes by matching the query against note TITLES and FILENAMES only (not body). Use this when the user asks:"
-        "\"есть ли заметка под названием\", \"найди заметку с заголовком\", \"покажи заметки про\", \"is there a note titled\", "
-        "\"find a note by title\", \"list notes\"."         
+        "List notes by matching the query against note TITLES and FILENAMES only (not body). Use this when the user asks: "
+        "'есть ли заметка под названием', 'найди заметку с заголовком', 'покажи заметки про', 'is there a note titled', "
+        "'find a note by title', 'list notes'. "
         "For searching INSIDE note bodies use search_notes instead. "
         "Returns path, title, preview. Includes category; paths are relative."
     ),
@@ -84,7 +88,10 @@ READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Optional substring to match against titles and filenames (case-insensitive). Empty or missing means list all notes.",
+                "description": (
+                    "Optional substring to match against titles and filenames (case-insensitive). "
+                    "Empty or missing means list all notes."
+                ),
             },
             "max_results": {
                 "type": "integer",
@@ -96,4 +103,5 @@ READ_NOTES_TOOL: ToolDefinition = ToolDefinition(
     },
     func=read_notes,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

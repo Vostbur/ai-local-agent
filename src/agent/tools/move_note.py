@@ -1,5 +1,4 @@
 """Перемещение заметки между категориями (подпапками notes_dir)."""
-
 from __future__ import annotations
 
 import shutil
@@ -9,7 +8,12 @@ from src.agent.registry import ToolDefinition
 from src.agent.tools._search import resolve_note_file, validate_category
 
 
-def move_note(path: str, category: str | None, notes_dir: Path) -> dict:
+def move_note(
+    path: str,
+    category: str | None,
+    notes_dir: Path,
+    trash_dir: Path | None = None,
+) -> dict:
     """Переместить заметку в категорию (подпапку) или в корень.
 
     При конфликте имён в целевой категории добавляется суффикс ``_1``, ``_2``...
@@ -18,6 +22,7 @@ def move_note(path: str, category: str | None, notes_dir: Path) -> dict:
         path: Путь заметки относительно notes_dir.
         category: Целевая категория. ``None`` или ``""`` — корень (без категории).
         notes_dir: Директория с заметками.
+        trash_dir: Директория корзины для исключения из поиска при фолбэке.
 
     Returns:
         Словарь ``{"path": новый путь, "category": ..., "moved": bool}``.
@@ -27,9 +32,9 @@ def move_note(path: str, category: str | None, notes_dir: Path) -> dict:
         ValueError: Если путь вне notes_dir или категория невалидна.
         FileNotFoundError: Если заметка не найдена.
     """
-    candidate = resolve_note_file(path, notes_dir)
-
+    candidate = resolve_note_file(path, notes_dir, trash_dir=trash_dir)
     category_clean = validate_category(category)
+
     target_dir = notes_dir / category_clean if category_clean else notes_dir
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -88,4 +93,5 @@ MOVE_NOTE_TOOL: ToolDefinition = ToolDefinition(
     },
     func=move_note,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

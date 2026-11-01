@@ -1,5 +1,4 @@
 """Обновление заметки: заголовок и/или содержимое (без переименования файла)."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,6 +12,7 @@ def update_note(
     notes_dir: Path,
     title: str | None = None,
     content: str | None = None,
+    trash_dir: Path | None = None,
 ) -> dict:
     """Обновить заголовок и/или тело существующей заметки.
 
@@ -24,6 +24,7 @@ def update_note(
         notes_dir: Директория с заметками.
         title: Новый заголовок (заменяет первую строку '# ...'). Опционален.
         content: Новое тело заметки в Markdown. Опционален.
+        trash_dir: Директория корзины для исключения из поиска при фолбэке.
 
     Returns:
         Словарь ``{"path": ..., "title": ..., "size_chars": ...}``.
@@ -35,10 +36,12 @@ def update_note(
     """
     if title is None and content is None:
         raise ValueError("Nothing to update: provide title and/or content")
+
     if title is not None and not title.strip():
         raise ValueError("title must not be empty")
 
-    candidate = resolve_note_file(path, notes_dir)
+    candidate = resolve_note_file(path, notes_dir, trash_dir=trash_dir)
+
     if candidate.suffix != ".md":
         raise ValueError(f"Not a Markdown note: {path!r}")
 
@@ -109,4 +112,5 @@ UPDATE_NOTE_TOOL: ToolDefinition = ToolDefinition(
     },
     func=update_note,
     needs_notes_dir=True,
+    needs_trash_dir=True,
 )

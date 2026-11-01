@@ -1,5 +1,4 @@
 """Удаление заметки: перемещение в data/trash/notes/ (не физическое удаление)."""
-
 from __future__ import annotations
 
 import shutil
@@ -28,11 +27,10 @@ def delete_note(path: str, notes_dir: Path, trash_dir: Path) -> dict:
         ValueError: Если путь вне notes_dir.
         FileNotFoundError: Если заметка не найдена.
     """
-    candidate = resolve_note_file(path, notes_dir)
-
+    candidate = resolve_note_file(path, notes_dir, trash_dir=trash_dir)
     rel = candidate.relative_to(notes_dir)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     trash_subdir = trash_dir / "notes" / rel.parent
     trash_subdir.mkdir(parents=True, exist_ok=True)
 
