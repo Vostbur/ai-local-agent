@@ -90,6 +90,7 @@
     localStorage.removeItem('agent_chat_history');
     localStorage.removeItem('agent_active_task');
     localStorage.removeItem('agent_active_goal');
+    localStorage.removeItem('agent_start_time');
     const log = document.getElementById('chat-log');
     if (log) {
         Array.from(log.children).forEach(child => {
@@ -220,10 +221,16 @@
     const statusText = assistantDiv.querySelector('.status-text');
     const contentDiv = assistantDiv.querySelector('.content');
     
-    let elapsedSeconds = 0;
+    // Берем время старта из localStorage, чтобы не сбрасывать его при переключении вкладок
+    let startTime = parseInt(localStorage.getItem('agent_start_time') || '0');
+    if (!startTime) {
+        startTime = Date.now();
+        localStorage.setItem('agent_start_time', startTime);
+    }
+
     statusText.textContent = 'Агент думает...';
     const timerInterval = setInterval(() => {
-        elapsedSeconds++;
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
         const mins = Math.floor(elapsedSeconds / 60);
         const secs = elapsedSeconds % 60;
         statusText.textContent = `Агент думает... ${mins > 0 ? mins + 'м ' : ''}${secs}с`;
@@ -238,6 +245,7 @@
       if (!streamRes.ok) {
           localStorage.removeItem('agent_active_task');
           localStorage.removeItem('agent_active_goal');
+          localStorage.removeItem('agent_start_time');
           throw new Error('Сессия потеряна. Пожалуйста, отправьте запрос заново.');
       }
       
@@ -304,6 +312,7 @@
       }
       localStorage.removeItem('agent_active_task');
       localStorage.removeItem('agent_active_goal');
+      localStorage.removeItem('agent_start_time');
       window.saveChatHistory();
       
       const input = document.getElementById('agent-input');
