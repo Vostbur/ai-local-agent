@@ -1,5 +1,4 @@
 """Хелперы для работы с Markdown-заметками."""
-
 from __future__ import annotations
 
 import logging
@@ -19,13 +18,40 @@ _WINDOWS_RESERVED = {
 }
 
 
-def iter_md_files(notes_dir: Path, recursive: bool = True) -> list[Path]:
+def _is_in_trash(path: Path, trash_dir: Path | None) -> bool:
+    """Проверяет, находится ли файл внутри директории корзины.
+
+    Использует resolve() для корректной обработки символических ссылок
+    и относительных путей с '..'. Возвращает False, если trash_dir
+    не задан или путь не может быть разрешён.
+    """
+    if trash_dir is None:
+        return False
+    try:
+        trash_resolved = trash_dir.resolve()
+        path_resolved = path.resolve()
+        return (
+            trash_resolved in path_resolved.parents
+            or path_resolved == trash_resolved
+        )
+    except (OSError, ValueError):
+        return False
+
+
+def iter_md_files(
+    notes_dir: Path,
+    recursive: bool = True,
+    trash_dir: Path | None = None,
+) -> list[Path]:
     """Отсортированный список *.md файлов в notes_dir.
 
     Args:
         notes_dir: Корневая директория заметок.
         recursive: Если True — обходит подпапки (категории).
             По умолчанию True, начиная с этапа B (категории).
+        trash_dir: Директория корзины. Если передана, файлы из неё
+            исключаются из результатов. Используется вместо хрупкой
+            проверки подстроки "trash" в частях пути.
     """
     if not notes_dir.exists():
         return []
@@ -34,11 +60,13 @@ def iter_md_files(notes_dir: Path, recursive: bool = True) -> list[Path]:
         return sorted(
             p
             for p in notes_dir.rglob("*.md")
-            if p.is_file() and "trash" not in p.parts
+            if p.is_file() and not _is_in_trash(p, trash_dir)
         )
 
     return sorted(
-        p for p in notes_dir.iterdir() if p.suffix == ".md" and p.is_file()
+        p
+        for p in notes_dir.iterdir()
+        if p.suffix == ".md" and p.is_file() and not _is_in_trash(p, trash_dir)
     )
 
 
@@ -56,7 +84,6 @@ def load_note(path: Path) -> Optional[dict]:
         return None
 
     lines = text.splitlines()
-
     if lines and lines[0].startswith("#"):
         title = lines[0][1:].strip()
         body = "\n".join(lines[1:])
@@ -70,7 +97,7 @@ def load_note(path: Path) -> Optional[dict]:
 def relative_path(path: Path, root: Path) -> str:
     """Относительный путь от root через POSIX-слэши.
 
-    Используется для передачи путёй между инструментами агента.
+    Используется для передачи путей между инструментами агента.
     """
     return path.relative_to(root).as_posix()
 
@@ -78,7 +105,7 @@ def relative_path(path: Path, root: Path) -> str:
 def is_safe_path(path: Path, root: Path) -> bool:
     """Проверка, что path находится внутри root (защита от path traversal).
 
-    Работает через resolve() — корректно обрабатывает ``..`` и символические ссылки.
+    Работает через resolve() — корректно обрабатывает .. и символические ссылки.
     """
     try:
         resolved = path.resolve()
@@ -95,7 +122,7 @@ def _make_slug_safe_name(name: str) -> str:
     """
     slug = name.strip().lower()
     slug = slug.replace(" ", "_")
-    slug = re.sub(r'[<>:"/|?*]', "", slug)
+    slug = re.sub(r'[<>:"/\\|?*]', "", slug)
     slug = re.sub(r"[\u0000-\u001f\u007f-\u009f]", "", slug)
     slug = "".join(
         ch
@@ -133,18 +160,21 @@ def validate_category(category: str | None) -> str | None:
     safe = _make_slug_safe_name(category)
     if not safe:
         raise ValueError(f"Invalid category name: {category!r}")
+
     if safe != category.strip().lower().replace(" ", "_"):
         # Имя содержит запрещённые символы, которые были удалены
         raise ValueError(f"Invalid category name: {category!r}")
+
     return safe
 
 
 def find_match(text: str, query: str) -> Optional[tuple[int, int]]:
     """Поиск подстроки query в text (без учёта регистра).
 
-    Возвращает ``(start, end)`` или ``None``.
+    Возвращает (start, end) или None.
     """
-    return find_match_with_kind(text, query)[:2] if find_match_with_kind(text, query) else None
+    result = find_match_with_kind(text, query)
+    return result[:2] if result else None
 
 
 def find_match_with_kind(
@@ -179,28 +209,32 @@ def find_match_with_kind(
 
     return None
 
-def resolve_note_path(path: str, notes_dir: Path) -> Path:
-    """Резолвит путь заметки и проверяет, что он внутри ``notes_dir``.
 
-    Принимает относительный путь (от ``notes_dir``) или абсолютный.
+def resolve_note_path(path: str, notes_dir: Path) -> Path:
+    """Резолвит путь заметки и проверяет, что он внутри `notes_dir`.
+
+    Принимает относительный путь (от notes_dir) или абсолютный.
 
     Raises:
-        ValueError: Если путь выходит за пределы ``notes_dir``.
+        ValueError: Если путь выходит за пределы notes_dir.
     """
     candidate = Path(path)
     if not candidate.is_absolute():
         candidate = notes_dir / candidate
+
     if not is_safe_path(candidate, notes_dir):
         raise ValueError(f"Path is outside the notes directory: {path!r}")
+
     return candidate
+
 
 def ensure_note_file(candidate: Path, path_repr: str) -> None:
     """Проверить, что заметка существует; иначе поднять ошибку с подсказкой.
 
-    Сообщение об ошибке явно говорит модели, что ``path`` — это путь к файлу,
-    а не заголовок, и что путь нужно сначала получить через ``list_notes`` /
-    ``read_notes``. Текст ошибки попадает в ``tool_result`` со статусом
-    ``ERROR``, и оркестратор передаёт его модели — это позволяет модели
+    Сообщение об ошибке явно говорит модели, что path — это путь к файлу,
+    а не заголовок, и что путь нужно сначала получить через list_notes /
+    read_notes. Текст ошибки попадает в tool_result со статусом
+    ERROR, и оркестратор передаёт его модели — это позволяет модели
     восстановиться на следующем шаге вместо завершения задачи.
 
     Raises:
@@ -209,28 +243,43 @@ def ensure_note_file(candidate: Path, path_repr: str) -> None:
     if not candidate.is_file():
         raise FileNotFoundError(
             f"Note not found: {path_repr!r}. The 'path' argument must be a "
-            f"file path relative to data/notes/ (e.g. 'тесты/тест_b1.md'), "
+            f"file path relative to data/notes/ (e.g. 'категория/имя_файла.md'), "
             f"NOT the note title. If you only know the title, call list_notes "
             f"or read_notes first to get the path, then retry."
         )
 
-def find_notes_by_title(title: str, notes_dir: Path) -> list[Path]:
-    """Заметки, чей заголовок (первая строка ``# ...``) совпадает с ``title``.
+
+def find_notes_by_title(
+    title: str,
+    notes_dir: Path,
+    trash_dir: Path | None = None,
+) -> list[Path]:
+    """Заметки, чей заголовок (первая строка `# ...`) совпадает с `title`.
 
     Сравнение без учёта регистра. Ищет рекурсивно по всем категориям.
+
+    Args:
+        title: Искомый заголовок.
+        notes_dir: Корневая директория заметок.
+        trash_dir: Директория корзины для исключения из поиска.
     """
     target = title.strip().lower()
     if not target:
         return []
 
     matches: list[Path] = []
-    for path in iter_md_files(notes_dir):
+    for path in iter_md_files(notes_dir, trash_dir=trash_dir):
         note = load_note(path)
         if note is not None and note["title"].strip().lower() == target:
             matches.append(path)
     return matches
 
-def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
+
+def resolve_note_file(
+    path_repr: str,
+    notes_dir: Path,
+    trash_dir: Path | None = None,
+) -> Path:
     """Резолвит заметку по пути с фолбэком на поиск по заголовку.
 
     Защита от устойчивого поведения 7B (три прогона 2026-10-30):
@@ -246,11 +295,17 @@ def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
        кандидатов: модель должна передать точный путь одного из них.
     4. Нет совпадений — направляющая ``FileNotFoundError``.
 
+    Args:
+        path_repr: Путь или заголовок заметки.
+        notes_dir: Корневая директория заметок.
+        trash_dir: Директория корзины для исключения из поиска.
+
     Raises:
         ValueError: Если путь выходит за пределы ``notes_dir``.
         FileNotFoundError: Если заметка не найдена или неоднозначна.
     """
     candidate = resolve_note_path(path_repr, notes_dir)
+
     if candidate.is_file():
         return candidate
 
@@ -262,7 +317,7 @@ def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
         queries.append(base)
 
     for query in queries:
-        matches = find_notes_by_title(query, notes_dir)
+        matches = find_notes_by_title(query, notes_dir, trash_dir=trash_dir)
         if len(matches) == 1:
             logger.info(
                 "resolved note by title: %r -> %s",
@@ -282,7 +337,8 @@ def resolve_note_file(path_repr: str, notes_dir: Path) -> Path:
     ensure_note_file(candidate, path_repr)
     return candidate  # недостижимо: ensure_note_file бросает исключение
 
+
 def category_of(path: Path, notes_dir: Path) -> str | None:
-    """Категория заметки: относительная папка или ``None`` для корня."""
+    """Категория заметки: относительная папка или `None` для корня."""
     parent_rel = path.parent.relative_to(notes_dir).as_posix()
     return None if parent_rel == "." else parent_rel
