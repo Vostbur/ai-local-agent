@@ -45,6 +45,27 @@ class TaskState:
         if self.finished_at is None:
             self.finished_at = time.time()
 
+def cleanup_expired_tasks(app: FastAPI, current_time: float) -> int:
+    """
+    Удаляет завершенные задачи старше 5 минут и брошенные задачи старше 2 часов.
+    Возвращает количество удаленных задач.
+    """
+    keys_to_delete = []
+    for tid, st in list(app.state.tasks.items()):
+        if st.is_finished():
+            # Держим завершенные задачи 5 минут для возможных поздних переподключений
+            if current_time - st.finished_at > 300:
+                keys_to_delete.append(tid)
+        else:
+            # Удаляем брошенные или зависшие задачи через 2 часа
+            if current_time - st.created_at > 7200:
+                keys_to_delete.append(tid)
+                
+    for tid in keys_to_delete:
+        app.state.tasks.pop(tid, None)
+        
+    return len(keys_to_delete)
+
 def _format_sse(event: StepEvent | FinalEvent | None) -> str:
     """Сериализовать событие в SSE-блок."""
     if isinstance(event, StepEvent):
@@ -109,21 +130,7 @@ async def lifespan(app: FastAPI):
     async def cleanup_loop():
         while True:
             await asyncio.sleep(60)  # Проверка каждую минуту
-            now = time.time()
-            keys_to_delete = []
-            
-            for tid, st in list(app.state.tasks.items()):
-                if st.is_finished():
-                    # Держим завершенные задачи 5 минут для возможных поздних переподключений
-                    if now - st.finished_at > 300:
-                        keys_to_delete.append(tid)
-                else:
-                    # Удаляем брошенные или зависшие задачи через 2 часа
-                    if now - st.created_at > 7200:
-                        keys_to_delete.append(tid)
-                        
-            for tid in keys_to_delete:
-                app.state.tasks.pop(tid, None)
+            cleanup_expired_tasks(app, time.time())
 
     cleanup_task = asyncio.create_task(cleanup_loop())
     try:
