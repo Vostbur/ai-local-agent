@@ -13,31 +13,42 @@
 
   <div id="chat-container" class="flex-1 rounded-xl border border-stone-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-800/50 flex flex-col overflow-hidden relative">
     <div id="chat-log" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 chat-scroll scroll-smooth">
-      <!-- Приветственное сообщение -->
-      <div id="welcome-message" class="flex gap-4 hidden">
+      <!-- Приветственное сообщение (без hidden, всегда видимо) -->
+      <div id="welcome-message" class="flex gap-4">
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
           <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
         </div>
         <div class="flex-1 space-y-2">
           <p class="text-sm font-medium text-stone-900 dark:text-slate-100">Привет! Чем я могу помочь?</p>
-          <div class="flex flex-wrap gap-2 mt-2">
-            <button type="button" onclick="fillInput('Найди в документах информацию про...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Поиск в документах</button>
-            <button type="button" onclick="fillInput('Сохрани заметку о...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Создать заметку</button>
-            <button type="button" onclick="fillInput('Сделай выжимку из документа...')" class="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 transition">Сделать выжимку</button>
-          </div>
         </div>
       </div>
     </div>
 
-    <div class="shrink-0 border-t border-stone-200 bg-stone-50/50 p-4 dark:border-slate-700/50 dark:bg-slate-800/30">
-      <form id="agent-form" class="relative max-w-3xl mx-auto" onsubmit="event.preventDefault(); submitAgent();">
-        <textarea id="agent-input" rows="1" placeholder="Напишите сообщение или задачу..."
-                  class="w-full resize-none rounded-xl border border-stone-200 bg-white px-4 py-3 pr-14 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-slate-600 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-indigo-500 dark:focus:ring-indigo-900/50"
-                  oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
-        <button type="submit" id="agent-submit-btn"
-                class="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
-        </button>
+    <!-- Новое поле ввода -->
+    <div class="shrink-0 p-4 pb-6">
+      <form id="agent-form" class="w-full" onsubmit="event.preventDefault(); window.submitAgent();">
+        <!-- Контейнер без жестких границ, с мягким фоном и фокус-рингом -->
+        <div class="flex flex-col rounded-2xl bg-stone-100 dark:bg-slate-800 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-shadow">
+          <textarea id="agent-input" rows="1" placeholder="Напишите сообщение или задачу..."
+                    class="w-full resize-none bg-transparent px-4 py-3 text-sm outline-none dark:text-slate-100"
+                    oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                    onkeydown="window.handleKeyDown(event)"></textarea>
+          
+          <!-- Нижняя панель с подсказками и кнопкой отправки -->
+          <div class="flex items-center justify-between px-3 pb-2 pt-1">
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" onclick="window.fillInput('Найди в документах информацию про...')" class="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-stone-600 hover:bg-stone-50 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition">Поиск в документах</button>
+              <button type="button" onclick="window.fillInput('Сохрани заметку о...')" class="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-stone-600 hover:bg-stone-50 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition">Создать заметку</button>
+              <button type="button" onclick="window.fillInput('Сделай выжимку из документа...')" class="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-stone-600 hover:bg-stone-50 dark:border-slate-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition">Сделать выжимку</button>
+            </div>
+            
+            <button type="submit" id="agent-submit-btn"
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <!-- Иконка стрелочки вверх -->
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>
+            </button>
+          </div>
+        </div>
       </form>
     </div>
   </div>
@@ -50,58 +61,71 @@
 <script>
 (function() {
   const savedHistory = localStorage.getItem('agent_chat_history');
-  if (savedHistory) {
-    document.getElementById('welcome-message').classList.add('hidden');
-    const log = document.getElementById('chat-log');
-    if (log) {
-        log.innerHTML = savedHistory;
-        log.scrollTop = log.scrollHeight;
-    }
-  } else {
-    document.getElementById('welcome-message').classList.remove('hidden');
+  const log = document.getElementById('chat-log');
+  
+  if (log) {
+      // Очищаем всё, кроме приветственного сообщения
+      Array.from(log.children).forEach(child => {
+          if (child.id !== 'welcome-message') {
+              child.remove();
+          }
+      });
+      
+      // Восстанавливаем историю сообщений после приветствия
+      if (savedHistory) {
+          log.insertAdjacentHTML('beforeend', savedHistory);
+          log.scrollTop = log.scrollHeight;
+      }
   }
 
   window.clearChat = function() {
     localStorage.removeItem('agent_chat_history');
     const log = document.getElementById('chat-log');
-    if (log) log.innerHTML = '';
-    
-    const welcome = document.getElementById('welcome-message');
-    if (welcome) {
-        welcome.classList.remove('hidden');
-        log.appendChild(welcome);
+    if (log) {
+        // Удаляем все сообщения, кроме welcome-message
+        Array.from(log.children).forEach(child => {
+            if (child.id !== 'welcome-message') {
+                child.remove();
+            }
+        });
     }
   };
 
   window.saveChatHistory = function() {
     try {
       const log = document.getElementById('chat-log');
-      if (log) {
-        const clone = log.cloneNode(true);
-        const typing = clone.querySelector('.typing-indicator');
-        if (typing && typing.closest('.flex.gap-4')) typing.closest('.flex.gap-4').remove(); 
-        
-        const welcome = clone.querySelector('#welcome-message');
-        const messages = clone.querySelectorAll('.flex.gap-4:not(#welcome-message)');
-        
-        if (messages.length > 0 && welcome) {
-            welcome.remove();
+      if (!log) return;
+
+      const clone = log.cloneNode(true);
+
+      // Удаляем только пузыри в процессе загрузки
+      clone.querySelectorAll('.flex.gap-4').forEach(msg => {
+        const indicator = msg.querySelector('.typing-indicator');
+        const content = msg.querySelector('.content');
+        if (indicator && content && content.classList.contains('hidden')) {
+          msg.remove();
         }
-        
-        if (messages.length > 20) {
-            for (let i = 0; i < messages.length - 20; i++) {
-                messages[i].remove();
-            }
+      });
+
+      // Убираем приветствие из сохраняемой истории (оно всегда в DOM)
+      const welcome = clone.querySelector('#welcome-message');
+      if (welcome) welcome.remove();
+
+      // Ограничиваем количество сообщений
+      const messages = clone.querySelectorAll('.flex.gap-4');
+      if (messages.length > 20) {
+        for (let i = 0; i < messages.length - 20; i++) {
+          messages[i].remove();
         }
-        
-        let html = clone.innerHTML;
-        if (typeof DOMPurify !== 'undefined') {
-            html = DOMPurify.sanitize(html);
-        } else {
-            html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-        }
-        localStorage.setItem('agent_chat_history', html);
       }
+
+      let html = clone.innerHTML;
+      if (typeof DOMPurify !== 'undefined') {
+        html = DOMPurify.sanitize(html);
+      } else {
+        html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      }
+      localStorage.setItem('agent_chat_history', html);
     } catch (e) {
       console.error('Ошибка сохранения истории', e);
     }
@@ -116,13 +140,17 @@
     input.style.height = input.scrollHeight + 'px';
   };
 
+  window.handleKeyDown = function(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      window.submitAgent();
+    }
+  };
+
   window.appendUserMessage = function(text) {
     const log = document.getElementById('chat-log');
     if (!log) return;
     
-    const welcome = document.getElementById('welcome-message');
-    if (welcome) welcome.classList.add('hidden');
-
     const div = document.createElement('div');
     div.className = 'flex gap-4 flex-row-reverse';
     div.innerHTML = `
@@ -171,7 +199,7 @@
   window.submitAgent = async function() {
     const input = document.getElementById('agent-input');
     const btn = document.getElementById('agent-submit-btn');
-    if (!input || !btn) return;
+    if (!input || !btn || input.disabled) return;
     
     const goal = input.value.trim();
     if (!goal) return;
@@ -227,9 +255,8 @@
 
         buffer += decoder.decode(value, { stream: true });
         
-        // Разделяем по двойному переносу (граница SSE-события)
         const parts = buffer.split(/\r?\n\r?\n/);
-        buffer = parts.pop(); // Оставляем незавершенную часть
+        buffer = parts.pop();
 
         for (const part of parts) {
             const lines = part.split(/\r?\n/);
@@ -240,7 +267,6 @@
                 if (line.startsWith('data:')) {
                     dataStr += line.substring(5).trim();
                 } else if (line.startsWith('{')) {
-                    // Фоллбэк, если бэкенд шлет сырой JSON без data:
                     dataStr += line.trim();
                 }
             }
@@ -248,7 +274,6 @@
             if (!dataStr) continue;
 
             try {
-                // УБРАНЫ ОПАСНЫЕ REPLACE. Бэкенд уже отдает валидный JSON через json.dumps()
                 const payload = JSON.parse(dataStr);
 
                 if (payload.type === 'step') {
