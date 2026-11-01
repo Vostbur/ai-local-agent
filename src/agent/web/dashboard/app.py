@@ -20,8 +20,6 @@ def make_dashboard_app(config: Any = None, logger: Any = None) -> FastAPI:
     # Главная страница дашборда (по умолчанию рендерит Агента)
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        # Рендерим base.html и вставляем внутрь views/agent.html
-        # В реальном проекте можно сделать наследование Jinja2, но здесь просто вернем базовый шаблон
         return _render(request, "index.html")
 
     # Эндпоинты для подгрузки views

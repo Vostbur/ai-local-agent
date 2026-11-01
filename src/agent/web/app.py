@@ -10,6 +10,7 @@ import json
 import logging
 import threading
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -31,6 +32,12 @@ class AskRequest(BaseModel):
 class IndexRequest(BaseModel):
     reset: bool = False
     documents: str | None = None
+
+
+@dataclass
+class TaskState:
+    """Хранилище состояния задачи для поддержки переподключений."""
+    events: list = field(default_factory=list)
 
 
 def _format_sse(event: StepEvent | FinalEvent | None) -> str:
@@ -63,18 +70,18 @@ def _run_task(
     task_id: str,
     goal: str,
     loop: asyncio.AbstractEventLoop,
-    queue: asyncio.Queue,
+    state: TaskState,
     service: AgentService,
     use_tools: bool,
 ) -> None:
-    """Фоновый поток: прогнать задачу, положить события в asyncio.Queue."""
+    """Фоновый поток: прогнать задачу, сохранить события в TaskState."""
+    def add_event(ev):
+        state.events.append(ev)
+
     try:
         events = service.ask(goal) if use_tools else service.ask_plain(goal)
         for event in events:
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, event)
-            except RuntimeError:
-                return
+            loop.call_soon_threadsafe(add_event, event)
     except Exception as exc:  # noqa: BLE001
         fallback = FinalEvent(
             OrchestratorResult(
@@ -84,15 +91,9 @@ def _run_task(
                 error=f"internal: {exc}",
             )
         )
-        try:
-            loop.call_soon_threadsafe(queue.put_nowait, fallback)
-        except RuntimeError:
-            return
+        loop.call_soon_threadsafe(add_event, fallback)
     finally:
-        try:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
-        except RuntimeError:
-            pass
+        loop.call_soon_threadsafe(add_event, None)
 
 
 def create_app(
@@ -100,25 +101,12 @@ def create_app(
     logger: logging.Logger,
     service: AgentService | None = None,
 ) -> FastAPI:
-    """Собрать FastAPI-приложение.
-
-    Args:
-        config: конфигурация приложения (для `build_index`).
-        logger: логгер для записи.
-        service: если передан — используется вместо нового `AgentService`
-            (для тестов).
-    """
+    """Собрать FastAPI-приложение."""
     app = FastAPI(title="AI Local Agent", docs_url="/api/docs")
     app.state.config = config
     app.state.logger = logger
     app.state.service = service or AgentService(config, logger)
-    app.state.tasks: dict[str, asyncio.Queue] = {}
-
-    # index_html = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
-
-    # @app.get("/", response_class=HTMLResponse)
-    # def index_page() -> str:
-    #     return index_html
+    app.state.tasks: dict[str, TaskState] = {}
 
     @app.get("/health")
     def health() -> dict:
@@ -128,15 +116,16 @@ def create_app(
         goal: str, use_tools: bool, loop: asyncio.AbstractEventLoop
     ) -> str:
         task_id = str(uuid.uuid4())
-        queue: asyncio.Queue = asyncio.Queue()
-        app.state.tasks[task_id] = queue
+        state = TaskState()
+        app.state.tasks[task_id] = state
+        
         threading.Thread(
             target=_run_task,
             args=(
                 task_id,
                 goal,
                 loop,
-                queue,
+                state,
                 app.state.service,
                 use_tools,
             ),
@@ -160,21 +149,33 @@ def create_app(
 
     @app.get("/stream/{task_id}")
     async def stream(task_id: str) -> StreamingResponse:
-        """SSE-поток событий задачи."""
+        """SSE-поток событий задачи с поддержкой переподключений."""
         if task_id not in app.state.tasks:
             raise HTTPException(status_code=404, detail="task not found")
 
-        queue = app.state.tasks[task_id]
+        state = app.state.tasks[task_id]
 
         async def gen():
+            last_idx = 0
             try:
                 while True:
-                    event = await queue.get()
-                    if event is None:
-                        break
-                    yield _format_sse(event)
+                    if last_idx < len(state.events):
+                        ev = state.events[last_idx]
+                        if ev is None:
+                            yield "event: end\ndata: {}\n\n"
+                            return
+                        yield _format_sse(ev)
+                        last_idx += 1
+                    else:
+                        # Если задача завершена и больше событий не будет
+                        if last_idx > 0 and state.events[-1] is None:
+                            return
+                        # Простой опрос раз в 100 мс
+                        await asyncio.sleep(0.1)
             finally:
-                app.state.tasks.pop(task_id, None)
+                # Если задача полностью завершена, удаляем ее из памяти
+                if state.events and state.events[-1] is None:
+                    app.state.tasks.pop(task_id, None)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -211,16 +212,14 @@ def create_app(
                 "error": f"internal: {exc}",
             }
 
-    from agent.web.notes.app import make_notes_app
-
+    # ВАЖНО: используем src.agent для всех импортов, чтобы избежать конфликта имен
+    from src.agent.web.notes.app import make_notes_app
     app.mount("/notes", make_notes_app(config, logger))
 
-    from agent.web.documents.app import make_documents_app
-
+    from src.agent.web.documents.app import make_documents_app
     app.mount("/documents", make_documents_app(config, logger))
 
-    from agent.web.dashboard.app import make_dashboard_app
-
+    from src.agent.web.dashboard.app import make_dashboard_app
     app.mount("/", make_dashboard_app(config, logger))
 
     return app
