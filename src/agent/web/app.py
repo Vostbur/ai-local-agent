@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -24,12 +23,15 @@ from src.agent.service import AgentService
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+
 class AskRequest(BaseModel):
     goal: str
+
 
 class IndexRequest(BaseModel):
     reset: bool = False
     documents: str | None = None
+
 
 @dataclass
 class TaskState:
@@ -37,6 +39,7 @@ class TaskState:
     events: list = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     finished_at: float | None = None
+    async_task: asyncio.Task | None = None
 
     def is_finished(self) -> bool:
         return bool(self.events) and self.events[-1] is None
@@ -44,6 +47,7 @@ class TaskState:
     def mark_finished(self):
         if self.finished_at is None:
             self.finished_at = time.time()
+
 
 def cleanup_expired_tasks(app: FastAPI, current_time: float) -> int:
     """
@@ -59,12 +63,16 @@ def cleanup_expired_tasks(app: FastAPI, current_time: float) -> int:
         else:
             # Удаляем брошенные или зависшие задачи через 2 часа
             if current_time - st.created_at > 7200:
+                # Отменяем асинхронную задачу, если она ещё жива
+                if st.async_task is not None and not st.async_task.done():
+                    st.async_task.cancel()
                 keys_to_delete.append(tid)
-                
+
     for tid in keys_to_delete:
         app.state.tasks.pop(tid, None)
-        
+
     return len(keys_to_delete)
+
 
 def _format_sse(event: StepEvent | FinalEvent | None) -> str:
     """Сериализовать событие в SSE-блок."""
@@ -92,24 +100,36 @@ def _format_sse(event: StepEvent | FinalEvent | None) -> str:
 
     return f"event: {payload['type']}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-def _run_task(
+
+async def _run_task_async(
     task_id: str,
     goal: str,
-    loop: asyncio.AbstractEventLoop,
     state: TaskState,
     service: AgentService,
     use_tools: bool,
 ) -> None:
-    """Фоновый поток: прогнать задачу, сохранить события в TaskState."""
+    """Асинхронная задача: прогнать цель, сохранить события в TaskState."""
     def add_event(ev):
         state.events.append(ev)
         if ev is None:
             state.mark_finished()
 
     try:
-        events = service.ask(goal) if use_tools else service.ask_plain(goal)
-        for event in events:
-            loop.call_soon_threadsafe(add_event, event)
+        events_iter = service.ask_async(goal) if use_tools else service.ask_plain_async(goal)
+        async for event in events_iter:
+            add_event(event)
+    except asyncio.CancelledError:
+        # Задача была отменена пользователем или фоновой очисткой
+        fallback = FinalEvent(
+            OrchestratorResult(
+                success=False,
+                final_answer=None,
+                steps_used=0,
+                error="cancelled",
+            )
+        )
+        add_event(fallback)
+        raise  # Пробрасываем, чтобы задача считалась отменённой
     except Exception as exc:  # noqa: BLE001
         fallback = FinalEvent(
             OrchestratorResult(
@@ -119,9 +139,9 @@ def _run_task(
                 error=f"internal: {exc}",
             )
         )
-        loop.call_soon_threadsafe(add_event, fallback)
+        add_event(fallback)
     finally:
-        loop.call_soon_threadsafe(add_event, None)
+        add_event(None)
 
 
 @asynccontextmanager
@@ -155,39 +175,45 @@ def create_app(
     def health() -> dict:
         return {"status": "ok"}
 
-    def _start_task(
-        goal: str, use_tools: bool, loop: asyncio.AbstractEventLoop
-    ) -> str:
+    def _start_task(goal: str, use_tools: bool) -> str:
         task_id = str(uuid.uuid4())
         state = TaskState()
         app.state.tasks[task_id] = state
-        threading.Thread(
-            target=_run_task,
-            args=(
-                task_id,
-                goal,
-                loop,
-                state,
-                app.state.service,
-                use_tools,
-            ),
-            daemon=True,
-        ).start()
+
+        async_task = asyncio.create_task(
+            _run_task_async(task_id, goal, state, app.state.service, use_tools)
+        )
+        state.async_task = async_task
+
         return task_id
 
     @app.post("/ask")
     async def ask(payload: AskRequest) -> dict:
         """Запустить агента с инструментами. Возвращает task_id для /stream."""
-        loop = asyncio.get_running_loop()
-        task_id = _start_task(payload.goal, use_tools=True, loop=loop)
+        task_id = _start_task(payload.goal, use_tools=True)
         return {"task_id": task_id}
 
     @app.post("/ask-plain")
     async def ask_plain(payload: AskRequest) -> dict:
         """Запустить чат без инструментов. Возвращает task_id."""
-        loop = asyncio.get_running_loop()
-        task_id = _start_task(payload.goal, use_tools=False, loop=loop)
+        task_id = _start_task(payload.goal, use_tools=False)
         return {"task_id": task_id}
+
+    @app.post("/cancel/{task_id}")
+    async def cancel(task_id: str) -> dict:
+        """Отменить выполняющуюся задачу."""
+        if task_id not in app.state.tasks:
+            raise HTTPException(status_code=404, detail="task not found")
+
+        state = app.state.tasks[task_id]
+        if state.is_finished():
+            return {"status": "already_finished"}
+
+        if state.async_task is not None and not state.async_task.done():
+            state.async_task.cancel()
+            return {"status": "cancelled"}
+
+        return {"status": "no_active_task"}
 
     @app.get("/stream/{task_id}")
     async def stream(task_id: str) -> StreamingResponse:
