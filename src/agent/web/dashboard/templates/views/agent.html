@@ -218,6 +218,45 @@
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   };
 
+  // T37: Сбор истории диалога из DOM для передачи в бэкенд
+  window.collectHistory = function() {
+    const log = document.getElementById('chat-log');
+    if (!log) return [];
+    
+    const messages = log.querySelectorAll('.flex.gap-4');
+    const history = [];
+    
+    messages.forEach(msg => {
+      // Пропускаем приветствие и индикаторы загрузки
+      if (msg.id === 'welcome-message') return;
+      const typingIndicator = msg.querySelector('.typing-indicator');
+      const content = msg.querySelector('.content');
+      if (typingIndicator && content && content.classList.contains('hidden')) return;
+      
+      // Определяем роль по структуре DOM
+      const isUser = msg.classList.contains('flex-row-reverse');
+      const role = isUser ? 'user' : 'assistant';
+      
+      // Извлекаем текст
+      let text = '';
+      if (isUser) {
+        const userDiv = msg.querySelector('.bg-indigo-600');
+        if (userDiv) text = userDiv.textContent.trim();
+      } else {
+        if (content && !content.classList.contains('hidden')) {
+          text = content.textContent.trim();
+        }
+      }
+      
+      if (text) {
+        history.push({ role, content: text });
+      }
+    });
+    
+    // Ограничиваем историю последними 10 сообщениями (T37: MAX_HISTORY_MESSAGES)
+    return history.slice(-10);
+  };
+
   window.switchToStop = function(taskId) {
     const btn = document.getElementById('agent-submit-btn');
     const sendIcon = document.getElementById('btn-icon-send');
@@ -316,13 +355,19 @@
                         contentDiv.classList.remove('hidden');
                         isFirstChunk = false;
                     }
-                    if (payload.final_answer) {
+                    
+                    // T37: Обработка отмены задачи
+                    if (payload.error === 'cancelled') {
+                        fullText = '⚠️ Задача отменена';
+                        contentDiv.innerHTML = `<span class="text-stone-500 italic">${fullText}</span>`;
+                    } else if (payload.final_answer) {
                         fullText = payload.final_answer;
                         contentDiv.innerHTML = typeof DOMPurify !== 'undefined' 
                             ? DOMPurify.sanitize(marked.parse(fullText)) 
                             : marked.parse(fullText);
-                        if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
                     }
+                    
+                    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
                 }
             } catch (e) {
                 console.warn("Skipped non-JSON SSE line:", dataStr);
@@ -372,11 +417,14 @@
     const assistantDiv = window.appendAssistantMessage();
     if (!assistantDiv) return;
     
+    // T37: Собираем историю из DOM перед отправкой
+    const history = window.collectHistory();
+    
     try {
       const res = await fetch('/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal })
+        body: JSON.stringify({ goal, history })
       });
       
       if (!res.ok) throw new Error('Ошибка при запуске агента');

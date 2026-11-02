@@ -1,5 +1,4 @@
 """Функции подкоманд для `python -m src.agent`."""
-
 from __future__ import annotations
 
 import logging
@@ -12,12 +11,28 @@ from src.agent.rag.build import build_index
 from src.agent.service import AgentService
 
 
-def _run_one(service: AgentService, goal: str, logger: logging.Logger) -> None:
-    """Выполнить одну задачу через AgentService и напечатать результат."""
-    print("[...] выполняется, подождите (на CPU это может занять несколько минут)")
+def _run_one(
+    service: AgentService,
+    goal: str,
+    logger: logging.Logger,
+    history: list[dict] | None = None,
+) -> str | None:
+    """Выполнить одну задачу через AgentService и напечатать результат.
 
+    Args:
+        service: Агент-сервис.
+        goal: Текущая цель.
+        logger: Логгер.
+        history: История диалога (T37). Передаётся в `service.ask()`.
+
+    Returns:
+        Финальный ответ агента (для накопления истории в интерактивном режиме),
+        или None при ошибке.
+    """
+    print("[...] выполняется, подождите (на CPU это может занять несколько минут)")
+    final_answer: str | None = None
     try:
-        for event in service.ask(goal):
+        for event in service.ask(goal, history=history):
             if isinstance(event, StepEvent):
                 if event.event_type == "tool_result":
                     count_str = (
@@ -37,6 +52,7 @@ def _run_one(service: AgentService, goal: str, logger: logging.Logger) -> None:
                     print(f"Шагов: {result.steps_used}")
                     if result.tool_results:
                         print(f"Результаты инструментов: {result.tool_results}")
+                    final_answer = result.final_answer
                 else:
                     print(
                         f"Не удалось выполнить задачу. "
@@ -46,6 +62,7 @@ def _run_one(service: AgentService, goal: str, logger: logging.Logger) -> None:
                         print(f"Причина: {result.error}")
     except KeyboardInterrupt:
         print("Прервано пользователем.")
+    return final_answer
 
 
 def run_once(goal: str, config: AppConfig, logger: logging.Logger) -> None:
@@ -55,12 +72,14 @@ def run_once(goal: str, config: AppConfig, logger: logging.Logger) -> None:
 
 
 def interactive_loop(config: AppConfig, logger: logging.Logger) -> None:
-    """`python -m agent chat` — интерактивный режим."""
+    """`python -m agent chat` — интерактивный режим с памятью диалога (T37)."""
     service = AgentService(config, logger)
-
     print(f"AI Local Agent (модель: {config.llm.model})")
     print("Введите цель или /quit для выхода.")
-
+    
+    # T37: Накопление истории диалога в памяти процесса
+    history: list[dict] = []
+    
     while True:
         try:
             goal = input("> ")
@@ -68,15 +87,22 @@ def interactive_loop(config: AppConfig, logger: logging.Logger) -> None:
             print()
             print("Выход.")
             return
-
         if not goal.strip():
             continue
-
         if goal.strip().lower() in {"/quit", "/exit", "exit", "quit"}:
             print("Выход.")
             return
-
-        _run_one(service, goal, logger)
+        
+        final_answer = _run_one(service, goal, logger, history=history)
+        
+        # T37: Добавляем пару (user, assistant) в историю
+        history.append({"role": "user", "content": goal})
+        if final_answer:
+            history.append({"role": "assistant", "content": final_answer})
+        
+        # Ограничиваем историю последними 20 сообщениями (10 пар)
+        if len(history) > 20:
+            history = history[-20:]
 
 
 def build_index_cmd(
@@ -88,7 +114,6 @@ def build_index_cmd(
 ) -> None:
     """`python -m agent index` — пересборка RAG-индекса."""
     root = documents.resolve() if documents else config.paths.documents_dir
-
     try:
         store = build_index(
             root=root,
@@ -103,7 +128,6 @@ def build_index_cmd(
     except FileExistsError as exc:
         print(f"Ошибка: {exc}. Используйте --reset для перезаписи.")
         sys.exit(1)
-
     print(f"Готово: {len(store)} чанков в {config.paths.index_dir}")
 
 
@@ -117,7 +141,6 @@ def search_cmd(
     from src.agent.tools.search_documents import make_search_documents_tool
 
     tool = make_search_documents_tool(config)
-
     try:
         results = tool.func(query, top_k=top_k)
     except FileNotFoundError as exc:
@@ -131,7 +154,6 @@ def search_cmd(
 
     print(f"Найдено {len(results)} фрагментов по запросу: {query!r}")
     print()
-
     for i, r in enumerate(results, start=1):
         print(f"[{i}] score={r['score']}  {r['path']}  section={r['section']}")
         text = r["text"]
@@ -146,9 +168,7 @@ def ask_once(
 ) -> None:
     """`python -m agent ask "вопрос"` — чат с моделью без tools."""
     service = AgentService(config, logger)
-
     print("[...] модель думает (на CPU это может занять несколько минут)")
-
     try:
         for event in service.ask_plain(goal):
             if isinstance(event, FinalEvent):
@@ -171,15 +191,17 @@ def ask_once(
 def ask_interactive(
     config: AppConfig, logger: logging.Logger
 ) -> None:
-    """`python -m agent ask` — интерактивный чат без инструментов."""
+    """`python -m agent ask` — интерактивный чат без инструментов с памятью (T37)."""
     service = AgentService(config, logger)
-
     print(
         f"AI Local Agent — чат с моделью "
         f"(модель: {config.llm.model}, без инструментов)"
     )
     print("Введите вопрос или /quit для выхода.")
-
+    
+    # T37: Накопление истории диалога в памяти процесса
+    history: list[dict] = []
+    
     while True:
         try:
             question = input("> ")
@@ -187,20 +209,19 @@ def ask_interactive(
             print()
             print("Выход.")
             return
-
         if not question.strip():
             continue
-
         if question.strip().lower() in {"/quit", "/exit", "exit", "quit"}:
             print("Выход.")
             return
-
         try:
-            for event in service.ask_plain(question):
+            final_answer: str | None = None
+            for event in service.ask_plain(question, history=history):
                 if isinstance(event, FinalEvent):
                     result = event.result
                     if result.success:
                         print(result.final_answer)
+                        final_answer = result.final_answer
                     elif result.error == "empty final answer":
                         print("(модель вернула пустой ответ)")
                     elif result.error and "Connection" in result.error:
@@ -210,9 +231,18 @@ def ask_interactive(
                         )
                     else:
                         print(f"Ошибка: {result.error}")
+            
+            # T37: Добавляем пару (user, assistant) в историю
+            history.append({"role": "user", "content": question})
+            if final_answer:
+                history.append({"role": "assistant", "content": final_answer})
+            
+            # Ограничиваем историю последними 20 сообщениями (10 пар)
+            if len(history) > 20:
+                history = history[-20:]
+                
         except KeyboardInterrupt:
             print()
             print("Выход.")
             return
-
         print()
