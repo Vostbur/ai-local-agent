@@ -29,16 +29,16 @@ LLM либо возвращает финальный ответ, либо про
 - восемь инструментов заметок (этап B): `save_note` (с категорией, возвращает `dict`), `read_notes`, `search_notes`, `list_notes`, `update_note`, `delete_note` (в корзину), `move_note`, `list_categories`; единый контракт путей (относительные от `data/notes/` + поле `category`); фолбэк резолва по заголовку (C9); явная фильтрация корзины по `trash_dir` (без проверки подстроки в имени);
 - корзина `data/trash/notes/` — сохраняет структуру категорий, добавляет таймстамп к имени;
 - `search_documents` — фабрика `make_search_documents_tool(config)` без глобального состояния;
-- `read_document` — чтение Markdown/TXT/PDF, защита от path traversal, обрезка до `max_chars`;
+- `read_document` — чтение Markdown/TXT/PDF/DOCX, защита от path traversal, обрезка до `max_chars`;
 - `write_document` — обёртка над `save_note` для `data/generated/`;
-- RAG по Markdown/TXT/PDF: реестр экстракторов, чанкинг с перекрытием, эмбеддинги `paraphrase-multilingual-mpnet-base-v2`, numpy-хранилище, гибридный поиск (BM25 + векторный через RRF), дисковый кэш BM25 (`bm25.json`, T39);
+- RAG по Markdown/TXT/PDF/DOCX: реестр экстракторов, чанкинг с перекрытием, эмбеддинги `paraphrase-multilingual-mpnet-base-v2`, numpy-хранилище, гибридный поиск (BM25 + векторный через RRF), дисковый кэш BM25 (`bm25.json`, T39);
 - общий стеммер `src/agent/stem.py` (префикс 5 символов) для BM25 и `find_match`;
 - Web UI: FastAPI + SSE, вкладки Агент / Документы / Чат (без tools); асинхронные задачи (`asyncio.create_task`), отмена задачи (`POST /cancel/{task_id}` + кнопка «стоп»), TTL-очистка `TaskState` в `lifespan`, переподключение при смене вкладок;
 - основная модель — `qwen2.5-7b-agent` (routing 7/7 в контрольном прогоне). 3B — опция для скорости.
 
 ### Пока не реализовано
 
-- работа с DOCX/HTML/EPUB (сейчас RAG на Markdown/TXT/PDF);
+- работа с HTML/EPUB (сейчас RAG на Markdown/TXT/PDF/DOCX);
 - прямой REST API для заметок (`GET/POST/PUT/DELETE /notes`, `POST /notes/{path}/move`, `GET /categories`) — остаток этапа B;
 - Web UI для заметок (вкладка «Заметки»: таблица, фильтр по категориям, CRUD, модальное окно редактирования) — остаток этапа B;
 - управление документами (загрузка/удаление) и инкрементальная индексация (этап C);
@@ -305,7 +305,7 @@ LLM либо возвращает финальный ответ, либо про
 - `EXTRACTORS: dict[str, TextExtractor]`.
 - `register(suffixes, extractor)` — нормализует суффикс (lower, с точкой), `ValueError` на дубликат.
 - `extract_text(path)` — диспатчер по suffix. Нет экстрактора → warning и `None`. Исключение → `logger.exception` и `None`. Один битый файл не роняет обход.
-- Регистрация всех — в конце файла. Новый формат = новый модуль + одна строка `register(...)`.
+- Регистрация всех — в конце файла. Новый формат = новый модуль + одна строка `register(...)`. По этому принципу подключён `docx.py` (`DocxExtractor`, суффикс `.docx`).
 
 #### `markdown.py`
 
@@ -472,7 +472,7 @@ LLM либо возвращает финальный ответ, либо про
 - `update_note` заменяет тело целиком. «Дополнить заметку» без чтения текущего тела невозможен; инструмента дописывания нет (осознанно).
 - Корзина без инструмента восстановления. Восстановление из `data/trash/notes/` — вручную.
 - Прямой REST API для заметок отсутствует — остаток этапа B. CRUD через агента работает, но прямой путь — мгновенный и предсказуемый — появится вместе с вкладкой «Заметки».
-- RAG только Markdown/TXT/PDF. DOCX/HTML/EPUB — в планах.
+- RAG только Markdown/TXT/PDF/DOCX. HTML/EPUB — в планах.
 - Скан-PDF не извлекается. Нужен OCR (отдельный шаг, документы).
 - Индекс RAG не инкрементальный. Любое изменение корпуса — `python -m agent index --reset`. Этап C.
 - `ask` может ошибаться на общих знаниях. Ограничение 7B, не проекта.

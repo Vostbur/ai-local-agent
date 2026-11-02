@@ -145,7 +145,7 @@ Web UI доступен по `0.0.0.0` (вся локальная сеть). А�
 
 ## 📌 После этапа E (опционально)
 
-- **DOCX/HTML/EPUB через реестр экстракторов.** `DocxExtractor` + `register(...)`. RAG не меняется.
+- **HTML/EPUB через реестр экстракторов** (DOCX уже закрыт: `DocxExtractor` + `register(...)`, RAG не менялся).
 - **Смена эмбеддинга на `intfloat/multilingual-e5-small`** — если C5 станет блокером.
 - **Cross-encoder реранкер после RRF** — если e5 не поможет.
 - **OCR для скан-PDF.** Tesseract или `pytesseract`. Документы, не фото.

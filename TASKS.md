@@ -126,6 +126,7 @@
 - [x] **7.5.** 7B как основная модель (routing 7/7, synthesis 6/7).
 - [x] **7.4.** `PdfExtractor` через реестр (PyMuPDF). Smoke: `EcoRouter-UserGuide.pdf` → 3116 чанков, OSPF → `Страница 117`.
 - [x] **7.3.** Генерация по шаблону: `read_document` + `write_document`. Smoke 2/2. Ограничения 7B — C6 (галлюцинации), C7 (2 tool_calls).
+- [x] **7.6.** `DocxExtractor` (`.docx`) через реестр экстракторов — поддержка DOCX в RAG и `read_document`.
 
 ## Tech debt: T28–T34 ✅
 - [x] **T28.** Общий `stem.py` (префикс 5 символов), `\b` в `find_match`.

@@ -13,8 +13,8 @@
 - **Перемещать заметки между категориями** (`move_note`) — при конфликте имён в целевой категории добавляется суффикс `_1`, `_2`.
 - **Показывать категории** (`list_categories`) — подпапки `data/notes/` с числом заметок в каждой.
 - **Принимать заголовок вместо пути** в `update_note` / `move_note` / `delete_note`: если файла по указанному пути нет, инструмент ищет заметку по заголовку (см. «Работа с заметками»).
-- **Искать по документам** (`search_documents`) — семантический поиск по Markdown, TXT и PDF в `data/documents/`. Гибридный поиск: BM25 (лексический) + векторный (эмбеддинги) через RRF. Находит по смыслу, а не только по точному слову.
-- **Читать документ целиком** (`read_document`) — Markdown, TXT, PDF, с обрезкой до `max_chars`.
+- **Искать по документам** (`search_documents`) — семантический поиск по Markdown, TXT, PDF и DOCX в `data/documents/`. Гибридный поиск: BM25 (лексический) + векторный (эмбеддинги) через RRF. Находит по смыслу, а не только по точному слову.
+- **Читать документ целиком** (`read_document`) — Markdown, TXT, PDF, DOCX, с обрезкой до `max_chars`.
 - **Создавать документ по шаблону** (`write_document`) — прочитать шаблон через `read_document`, сгенерировать новый по структуре, сохранить в `data/generated/`.
 - **Чат с моделью без инструментов** (`python -m agent ask "вопрос"`) — прямое обращение к LLM, как `ollama run`, без SYSTEM_PROMPT и без tools. Интерактивный режим (без аргумента) помнит контекст диалога в пределах сессии.
 - **Помнить контекст диалога** в `chat`, интерактивном `ask` и веб-чате: уточнения вида «перенеси её в категорию Покупки» или «а подробнее?» понимаются без повторения предыдущих условий. История ограничена: последние 10 сообщений, суммарно до 4000 символов (защита контекста 7B от переполнения).
@@ -33,7 +33,7 @@
 - Управление документами через Web UI: загрузка, удаление, инкрементальная переиндексация — этап C.
 - Подхват нового RAG-индекса запущенным веб-сервером без перезапуска (T41; сейчас после переиндексации нужен перезапуск `python -m agent web`).
 - Создание документа по образцу через Web UI — этап D.
-- Расширение RAG: DOCX, HTML, EPUB (сейчас — Markdown, TXT, PDF).
+- Расширение RAG: HTML, EPUB (сейчас — Markdown, TXT, PDF, DOCX).
 
 Текущий статус и план — в `TASKS.md`. Roadmap — в `TODO.md`.
 
@@ -224,7 +224,7 @@ python D:\projects\ai-local-agent\scripts\run_agent.py "Покажи все за
 
 Если хотите искать по документам:
 
-1. Положите `.md`, `.txt` или `.pdf` файлы в `data/documents/` (можно в подпапки).
+1. Положите `.md`, `.txt`, `.pdf` или `.docx` файлы в `data/documents/` (можно в подпапки).
 2. Соберите индекс:
 
 ```bash
@@ -457,11 +457,11 @@ python -m agent run "Удали заметку 'Встреча'"
 
 ## Работа с документами (RAG)
 
-Агент ищет по Markdown, TXT и PDF в `data/documents/` через `search_documents`.
+Агент ищет по Markdown, TXT, PDF и DOCX в `data/documents/` через `search_documents`.
 
 | Шаг | Команда |
 | --- | --- |
-| 1. Положить документы | Скопировать `.md` / `.txt` / `.pdf` в `data/documents/` (можно в подпапки) |
+| 1. Положить документы | Скопировать `.md` / `.txt` / `.pdf` / `.docx` в `data/documents/` (можно в подпапки) |
 | 2. Собрать индекс | `python -m agent index --reset` |
 | 3. Спросить | `python -m agent run "Что в документах про OSPF?"` |
 
@@ -484,6 +484,7 @@ python -m agent search "OSPF" --top-k 3
 - `MarkdownExtractor` (`.md`): режет по заголовкам `#`, убирает code blocks, ссылки, изображения, HTML-теги.
 - `TxtExtractor` (`.txt`): один сегмент.
 - `PdfExtractor` (`.pdf`): страница → сегмент с `section="Страница N"`; страницы без текстового слоя (сканы) пропускаются.
+- `DocxExtractor` (`.docx`): подключён через тот же реестр экстракторов (`register(...)`), RAG не менялся.
 
 Новый формат = новый модуль + одна строка `register(...)` в `src/agent/extractors/__init__.py`. RAG не меняется.
 
@@ -656,7 +657,7 @@ python -m agent run "Сохрани заметку 'Тест запуска' с 
 | Чтение документа | `src/agent/tools/read_document.py` | `read_document` |
 | Создание документа | `src/agent/tools/write_document.py` | `write_document` |
 | Общие хелперы заметок | `src/agent/tools/_search.py` | `find_match`, `iter_md_files`, `load_note`, `category_of`, `validate_category`, `resolve_note_file`, `find_notes_by_title` |
-| Извлечение текста | `src/agent/extractors/` | `extract_text`, `MarkdownExtractor`, `TxtExtractor`, `PdfExtractor` |
+| Извлечение текста | `src/agent/extractors/` | `extract_text`, `MarkdownExtractor`, `TxtExtractor`, `PdfExtractor`, `DocxExtractor` |
 | Обход документов | `src/agent/indexer.py` | `index_documents`, `iter_document_files` |
 | RAG: chunking, embeddings, search, кэш BM25 | `src/agent/rag/` | `chunk_document`, `Embedder`, `VectorStore` (`save`/`load` с `bm25.json`), `BM25Index` (`to_dict`/`from_dict`), `build_index` |
 | Веб-сервер, задачи, отмена | `src/agent/web/app.py` | `create_app`, `TaskState`, `cleanup_expired_tasks`, `POST /cancel/{task_id}` |
@@ -702,7 +703,7 @@ ai-local-agent/
  │       ├── app.py                ← build_orchestrator, build_tools
  │       ├── service.py            ← AgentService (CLI/Web, sync/async, history)
  │       ├── indexer.py            ← обход документов, extract_text
- │       ├── extractors/           ← реестр: base, markdown, txt, pdf
+│ ├── extractors/ ← реестр: base, markdown, txt, pdf, docx
  │       ├── rag/                  ← chunker, embedder, bm25 (с кэшем), store, build
  │       ├── web/                  ← FastAPI + SSE + отмена задач
  │       └── tools/
@@ -832,7 +833,7 @@ max_tool_retries = 3
 - **T41: запущенный веб-сервер не подхватывает новый RAG-индекс после переиндексации** — держит старый `VectorStore` в памяти до перезапуска. Обход: перезапуск `python -m agent web`; чинится вместе с этапом C.
 - **Память диалога ограничена:** последние 10 сообщений, суммарно до 4000 символов (веб) / 20 сообщений (CLI) — защита контекста 7B от переполнения. Долговременной памяти между сессиями нет.
 - **Галлюцинации на неполных запросах.** На «Запиши заметку в файл» без содержания модель может придумать заголовок. Промпт `save_note` просит уточнения, но на 7B галлюцинация не устранена полностью.
-- **RAG работает только на Markdown, TXT, PDF.** DOCX, HTML, EPUB — в планах.
+- **RAG работает на Markdown, TXT, PDF, DOCX.** HTML, EPUB — в планах.
 - **Скан-PDF не извлекается.** PDF без текстового слоя (сканы) пропускается; нужен OCR (отдельный шаг).
 - **Один инструмент за шаг.** Для двух действий — два запроса.
 - **Индекс RAG не инкрементальный.** Любое изменение корпуса — `python -m agent index --reset`.
