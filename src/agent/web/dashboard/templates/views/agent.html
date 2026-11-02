@@ -41,7 +41,8 @@
             
             <button type="submit" id="agent-submit-btn"
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>
+              <svg id="btn-icon-send" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18"/></svg>
+              <svg id="btn-icon-stop" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"/></svg>
             </button>
           </div>
         </div>
@@ -81,7 +82,8 @@
           const input = document.getElementById('agent-input');
           const btn = document.getElementById('agent-submit-btn');
           if (input) input.disabled = true;
-          if (btn) btn.disabled = true;
+          if (btn) btn.disabled = false;
+          window.switchToStop(activeTaskId);
           window.startStream(activeTaskId, assistantDiv);
       }
   }
@@ -216,7 +218,38 @@
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   };
 
+  window.switchToStop = function(taskId) {
+    const btn = document.getElementById('agent-submit-btn');
+    const sendIcon = document.getElementById('btn-icon-send');
+    const stopIcon = document.getElementById('btn-icon-stop');
+    if (!btn || !sendIcon || !stopIcon) return;
+    sendIcon.classList.add('hidden');
+    stopIcon.classList.remove('hidden');
+    btn.type = 'button';
+    btn.disabled = false;
+    btn.onclick = async function() {
+      try {
+        await fetch('/cancel/' + taskId, { method: 'POST' });
+      } catch (e) {
+        console.error('Cancel failed', e);
+      }
+      window.switchToSend();
+    };
+  };
+
+  window.switchToSend = function() {
+    const btn = document.getElementById('agent-submit-btn');
+    const sendIcon = document.getElementById('btn-icon-send');
+    const stopIcon = document.getElementById('btn-icon-stop');
+    if (!btn || !sendIcon || !stopIcon) return;
+    sendIcon.classList.remove('hidden');
+    stopIcon.classList.add('hidden');
+    btn.type = 'submit';
+    btn.onclick = null;
+  };
+
   window.startStream = async function(taskId, assistantDiv) {
+    window.switchToStop(taskId);
     const typingIndicator = assistantDiv.querySelector('.typing-indicator');
     const statusText = assistantDiv.querySelector('.status-text');
     const contentDiv = assistantDiv.querySelector('.content');
@@ -314,11 +347,11 @@
       localStorage.removeItem('agent_active_goal');
       localStorage.removeItem('agent_start_time');
       window.saveChatHistory();
+      window.switchToSend();
       
       const input = document.getElementById('agent-input');
       const btn = document.getElementById('agent-submit-btn');
       if (input) { input.disabled = false; input.focus(); }
-      if (btn) btn.disabled = false;
     }
   };
 
@@ -358,6 +391,7 @@
       
     } catch (err) {
       console.error(err);
+      window.switchToSend();
       const contentDiv = assistantDiv.querySelector('.content');
       const typingIndicator = assistantDiv.querySelector('.typing-indicator');
       if (typingIndicator) typingIndicator.classList.add('hidden');
