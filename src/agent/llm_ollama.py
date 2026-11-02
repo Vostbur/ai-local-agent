@@ -1,5 +1,7 @@
 """Ollama LLM client."""
+from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -7,6 +9,12 @@ import requests
 
 from src.agent.llm import LLMResponse
 from src.agent.registry import ToolDefinition
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
 
 logger = logging.getLogger("agent")
 
@@ -16,11 +24,11 @@ class OllamaLLM:
         self,
         model: str = "qwen2.5-3b-agent",
         base_url: str = "http://localhost:11434",
-        timeout: int = 900,
+        timeout: int = 300,
         tools: list[ToolDefinition] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
-        keep_alive: str | int | None = -1,  # <-- ДОБАВЛЕНО: по умолчанию держать в памяти
+        keep_alive: str | int | None = -1,
     ) -> None:
         self.model = model
         self.base_url = base_url
@@ -28,18 +36,10 @@ class OllamaLLM:
         self.tools = tools or []
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.keep_alive = keep_alive  # <-- ДОБАВЛЕНО
+        self.keep_alive = keep_alive
 
-    def chat(self, messages: list[dict]) -> LLMResponse:
-        last = messages[-1] if messages else {}
-        logger.info(
-            "Ollama request: model=%s, messages_count=%d, last_role=%s, last_len=%d",
-            self.model,
-            len(messages),
-            last.get("role"),
-            len(last.get("content") or ""),
-        )
-
+    def _build_payload(self, messages: list[dict]) -> dict:
+        """Собрать общий payload для синхронного и асинхронного запросов."""
         tools_payload = None
         if self.tools:
             tools_payload = [
@@ -59,34 +59,24 @@ class OllamaLLM:
             "messages": messages,
             "stream": False,
         }
-        
-        # <-- ДОБАВЛЕНО: передаем keep_alive, если он задан
+
         if self.keep_alive is not None:
             payload["keep_alive"] = self.keep_alive
 
         if tools_payload is not None:
             payload["tools"] = tools_payload
             payload["tool_choice"] = "auto"
+
         if self.temperature is not None:
             payload["temperature"] = self.temperature
+
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
 
-        try:
-            resp = requests.post(
-                f"{self.base_url}/v1/chat/completions",
-                json=payload,
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-        except requests.RequestException as exc:
-            raise RuntimeError(f"Ollama request failed: {exc}")
+        return payload
 
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise RuntimeError(f"Ollama returned invalid JSON: {exc}")
-
+    def _parse_response(self, data: dict) -> LLMResponse:
+        """Общий парсинг ответа от Ollama."""
         if not isinstance(data, dict):
             raise RuntimeError(
                 f"Ollama returned unexpected JSON type: {type(data).__name__}"
@@ -139,3 +129,68 @@ class OllamaLLM:
 
         logger.info("Ollama response: type=final")
         return LLMResponse(type="final", content=message.get("content"))
+
+    def _log_request(self, messages: list[dict], async_mode: bool) -> None:
+        """Логирование запроса."""
+        last = messages[-1] if messages else {}
+        logger.info(
+            "Ollama %srequest: model=%s, messages_count=%d, last_role=%s, last_len=%d",
+            "async " if async_mode else "",
+            self.model,
+            len(messages),
+            last.get("role"),
+            len(last.get("content") or ""),
+        )
+
+    def chat(self, messages: list[dict]) -> LLMResponse:
+        """Синхронный вызов модели (для CLI и обратной совместимости)."""
+        self._log_request(messages, async_mode=False)
+        payload = self._build_payload(messages)
+
+        try:
+            resp = requests.post(
+                f"{self.base_url}/v1/chat/completions",
+                json=payload,
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Ollama request failed: {exc}")
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Ollama returned invalid JSON: {exc}")
+
+        return self._parse_response(data)
+
+    async def chat_async(self, messages: list[dict]) -> LLMResponse:
+        """Асинхронный вызов модели.
+
+        Если установлен httpx — используется асинхронный HTTP-клиент.
+        Иначе — фолбэк на asyncio.to_thread с синхронным chat().
+        """
+        self._log_request(messages, async_mode=True)
+
+        if not HAS_HTTPX:
+            logger.debug("httpx not installed, falling back to sync chat in thread")
+            return await asyncio.to_thread(self.chat, messages)
+
+        payload = self._build_payload(messages)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                resp = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json=payload,
+                )
+                resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Ollama async request failed: {exc}")
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise RuntimeError(f"Ollama returned invalid JSON: {exc}")
+
+        return self._parse_response(data)
