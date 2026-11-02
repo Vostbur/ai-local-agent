@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Iterator
 from typing import Union
@@ -18,6 +19,7 @@ from src.agent.orchestrator import (
     Orchestrator,
     OrchestratorResult,
     StepEvent,
+    sanitize_history,
 )
 
 Event = Union[StepEvent, FinalEvent]
@@ -36,18 +38,34 @@ class AgentService:
             self._orchestrator = build_orchestrator(self.config, self.logger)
         return self._orchestrator
 
+    def _plain_messages(
+        self, goal: str, history: list[dict] | None
+    ) -> list[dict]:
+        """Контекст для чата без инструментов: история + текущая реплика."""
+        return [
+            *sanitize_history(history),
+            {"role": "user", "content": goal},
+        ]
+
     # ------------------------------------------------------------------
     # Синхронные методы (для CLI и обратной совместимости)
     # ------------------------------------------------------------------
 
-    def ask(self, goal: str) -> Iterator[Event]:
-        """Выполнить задачу с инструментами синхронно, выдать поток событий."""
+    def ask(
+        self,
+        goal: str,
+        history: list[dict] | None = None,
+    ) -> Iterator[Event]:
+        """Выполнить задачу с инструментами синхронно, выдать поток событий.
+
+        ``history`` — предыдущие реплики диалога (T37).
+        """
         events: list[StepEvent] = []
         result: OrchestratorResult | None = None
 
         try:
             orch = self._get_orchestrator()
-            result = orch.run(goal, on_step=events.append)
+            result = orch.run(goal, on_step=events.append, history=history)
         except MaxStepsExceeded as exc:
             result = OrchestratorResult(
                 success=False,
@@ -66,7 +84,11 @@ class AgentService:
         yield from events
         yield FinalEvent(result)
 
-    def ask_plain(self, goal: str) -> Iterator[Event]:
+    def ask_plain(
+        self,
+        goal: str,
+        history: list[dict] | None = None,
+    ) -> Iterator[Event]:
         """Чат с моделью без инструментов синхронно. Один `FinalEvent` в конце."""
         from src.agent.llm_ollama import OllamaLLM
 
@@ -78,8 +100,10 @@ class AgentService:
             max_tokens=self.config.llm.max_tokens,
         )
 
+        messages = self._plain_messages(goal, history)
+
         try:
-            response = llm.chat([{"role": "user", "content": goal}])
+            response = llm.chat(messages)
         except RuntimeError as exc:
             yield FinalEvent(
                 OrchestratorResult(
@@ -115,17 +139,16 @@ class AgentService:
     # Асинхронные методы (для FastAPI / SSE)
     # ------------------------------------------------------------------
 
-    async def ask_async(self, goal: str) -> AsyncIterator[Event]:
+    async def ask_async(
+        self,
+        goal: str,
+        history: list[dict] | None = None,
+    ) -> AsyncIterator[Event]:
         """Выполнить задачу с инструментами асинхронно, выдать поток событий.
 
-        События отдаются по мере их появления, а не все разом после завершения.
-        Это позволяет клиенту видеть прогресс в реальном времени.
+        ``history`` — предыдущие реплики диалога (T37).
         """
         orch = self._get_orchestrator()
-
-        # Канал для передачи событий из оркестратора в асинхронный генератор.
-        # Используем asyncio.Queue, чтобы события стримились сразу.
-        import asyncio
 
         queue: asyncio.Queue[Event | None] = asyncio.Queue()
 
@@ -133,12 +156,13 @@ class AgentService:
             try:
                 queue.put_nowait(event)
             except Exception:
-                # Если очередь сломана, просто логируем
                 self.logger.exception("Failed to enqueue step event")
 
         async def runner() -> None:
             try:
-                result = await orch.run_async(goal, on_step=on_step)
+                result = await orch.run_async(
+                    goal, on_step=on_step, history=history
+                )
                 await queue.put(FinalEvent(result))
             except MaxStepsExceeded as exc:
                 await queue.put(
@@ -186,7 +210,6 @@ class AgentService:
                     break
                 yield event
         finally:
-            # Если генератор закрыли (например, клиент отключился), отменяем задачу
             if not task.done():
                 task.cancel()
                 try:
@@ -194,7 +217,11 @@ class AgentService:
                 except (asyncio.CancelledError, Exception):
                     pass
 
-    async def ask_plain_async(self, goal: str) -> AsyncIterator[Event]:
+    async def ask_plain_async(
+        self,
+        goal: str,
+        history: list[dict] | None = None,
+    ) -> AsyncIterator[Event]:
         """Чат с моделью без инструментов асинхронно."""
         from src.agent.llm_ollama import OllamaLLM
 
@@ -206,8 +233,10 @@ class AgentService:
             max_tokens=self.config.llm.max_tokens,
         )
 
+        messages = self._plain_messages(goal, history)
+
         try:
-            response = await llm.chat_async([{"role": "user", "content": goal}])
+            response = await llm.chat_async(messages)
         except RuntimeError as exc:
             yield FinalEvent(
                 OrchestratorResult(

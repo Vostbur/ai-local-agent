@@ -82,6 +82,57 @@ SYSTEM_PROMPT = (
 
 MAX_TOOL_FAILURES = 2
 
+# Ограничения истории диалога (T37): бюджет под num_ctx=8192.
+MAX_HISTORY_MESSAGES = 10
+MAX_HISTORY_CHARS = 4000
+MAX_HISTORY_MESSAGE_CHARS = 2000
+
+
+def sanitize_history(
+    history: list[dict] | None,
+    max_messages: int = MAX_HISTORY_MESSAGES,
+    max_chars: int = MAX_HISTORY_CHARS,
+    max_message_chars: int = MAX_HISTORY_MESSAGE_CHARS,
+) -> list[dict]:
+    """Отфильтровать и обрезать историю диалога для вставки в контекст.
+
+    Защита от переполнения контекста и от мусора в теле запроса:
+    - оставляем только роли ``user`` / ``assistant`` с непустым строковым
+      содержимым (роли ``system`` / ``tool`` от клиента не принимаем);
+    - обрезаем каждое сообщение до ``max_message_chars``;
+    - берём последние ``max_messages`` сообщений;
+    - укладываемся в суммарный бюджет ``max_chars``, отбрасывая старейшие.
+    """
+    if not history:
+        return []
+
+    clean: list[dict] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if not content:
+            continue
+        if len(content) > max_message_chars:
+            content = content[:max_message_chars] + "…"
+        clean.append({"role": role, "content": content})
+
+    clean = clean[-max_messages:]
+
+    total = 0
+    kept: list[dict] = []
+    for item in reversed(clean):
+        total += len(item["content"])
+        if total > max_chars:
+            break
+        kept.append(item)
+    kept.reverse()
+    return kept
+
 
 def _summarize_for_log(result: object) -> str:
     """Краткое описание результата инструмента для лога.
@@ -175,12 +226,19 @@ class Orchestrator:
         self.tool_context = tool_context or {}
         self.max_tool_failures = max_tool_failures
 
-    async def _chat_async(self, messages: list[dict]) -> Any:
-        """Асинхронный вызов LLM с fallback на синхронный chat().
+    @staticmethod
+    def _build_messages(
+        goal: str, history: list[dict] | None
+    ) -> list[dict]:
+        """Собрать контекст: system + санитарная история + текущая цель."""
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            *sanitize_history(history),
+            {"role": "user", "content": goal},
+        ]
 
-        Новый OllamaLLM может реализовать chat_async().
-        Старые клиенты и тестовые fake-клиенты могут иметь только chat().
-        """
+    async def _chat_async(self, messages: list[dict]) -> Any:
+        """Асинхронный вызов LLM с fallback на синхронный chat()."""
         chat_async = getattr(self.llm, "chat_async", None)
         if callable(chat_async):
             return await chat_async(messages)
@@ -190,17 +248,19 @@ class Orchestrator:
         self,
         goal: str,
         on_step: Callable[[StepEvent], None] | None = None,
+        history: list[dict] | None = None,
     ) -> OrchestratorResult:
-        """Выполнить цель синхронно, опционально сообщая о каждом шаге."""
+        """Выполнить цель синхронно, опционально сообщая о каждом шаге.
+
+        ``history`` — предыдущие реплики диалога (T37); вставляется
+        между системным промптом и текущей целью после санитарии.
+        """
 
         def emit(event: StepEvent) -> None:
             if on_step is not None:
                 on_step(event)
 
-        messages: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": goal},
-        ]
+        messages: list[dict] = self._build_messages(goal, history)
         tool_results: list[Any] = []
         executed_calls: set[str] = set()
         failed_calls: dict[str, int] = {}
@@ -341,23 +401,19 @@ class Orchestrator:
         self,
         goal: str,
         on_step: Callable[[StepEvent], None] | None = None,
+        history: list[dict] | None = None,
     ) -> OrchestratorResult:
-        """Выполнить цель асинхронно.
+        """Выполнить цель асинхронно (для FastAPI/SSE).
 
-        Метод нужен для FastAPI/SSE, чтобы не держать отдельный поток на весь
-        цикл агента. Сетевые вызовы LLM выполняются через chat_async(), если
-        клиент его поддерживает. Синхронные инструменты вызываются через
-        asyncio.to_thread(), чтобы не блокировать event loop.
+        ``history`` — предыдущие реплики диалога (T37); вставляется
+        между системным промптом и текущей целью после санитарии.
         """
 
         def emit(event: StepEvent) -> None:
             if on_step is not None:
                 on_step(event)
 
-        messages: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": goal},
-        ]
+        messages: list[dict] = self._build_messages(goal, history)
         tool_results: list[Any] = []
         executed_calls: set[str] = set()
         failed_calls: dict[str, int] = {}

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -33,7 +33,7 @@ async def test_run_task_async_success():
     state = TaskState()
     service = MagicMock()
 
-    async def fake_ask_async(goal):
+    async def fake_ask_async(goal, history=None):
         yield StepEvent(step=1, event_type="llm_call")
         yield _make_final_event("Ответ")
 
@@ -55,7 +55,7 @@ async def test_run_task_async_plain_mode():
     state = TaskState()
     service = MagicMock()
 
-    async def fake_ask_plain(goal):
+    async def fake_ask_plain(goal, history=None):
         yield _make_final_event("Чат без инструментов")
 
     service.ask_plain_async = fake_ask_plain
@@ -68,12 +68,40 @@ async def test_run_task_async_plain_mode():
 
 
 @pytest.mark.anyio
+async def test_run_task_async_passes_history():
+    """_run_task_async передаёт history в сервис (T37)."""
+    state = TaskState()
+    service = MagicMock()
+    captured = {}
+
+    async def fake_ask_async(goal, history=None):
+        captured["goal"] = goal
+        captured["history"] = history
+        yield _make_final_event("Ответ")
+
+    service.ask_async = fake_ask_async
+
+    history = [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+    ]
+
+    await _run_task_async(
+        "task1", "уточнение", state, service, use_tools=True, history=history
+    )
+
+    assert captured["goal"] == "уточнение"
+    assert captured["history"] == history
+    assert state.is_finished()
+
+
+@pytest.mark.anyio
 async def test_run_task_async_handles_exception():
     """_run_task_async обрабатывает исключения и добавляет ошибку."""
     state = TaskState()
     service = MagicMock()
 
-    async def failing_ask(goal):
+    async def failing_ask(goal, history=None):
         raise RuntimeError("Something went wrong")
         yield  # noqa: unreachable
 
@@ -94,7 +122,7 @@ async def test_run_task_async_cancellation():
     state = TaskState()
     service = MagicMock()
 
-    async def slow_ask(goal):
+    async def slow_ask(goal, history=None):
         await asyncio.sleep(60)
         yield _make_final_event("Не должно дойти")
 

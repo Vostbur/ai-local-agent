@@ -98,7 +98,7 @@ async def test_ask_async_streams_events():
     # Мокаем оркестратор
     mock_orch = MagicMock()
 
-    async def fake_run_async(goal, on_step=None):
+    async def fake_run_async(goal, on_step=None, history=None):
         if on_step:
             on_step(StepEvent(step=1, event_type="llm_call"))
             on_step(
@@ -135,6 +135,45 @@ async def test_ask_async_streams_events():
 
 
 @pytest.mark.anyio
+async def test_ask_async_passes_history_to_orchestrator():
+    """ask_async передаёт history в оркестратор (T37)."""
+    config = _make_config()
+    logger = logging.getLogger("test")
+    service = AgentService(config, logger)
+
+    mock_orch = MagicMock()
+    captured: dict = {}
+
+    async def fake_run_async(goal, on_step=None, history=None):
+        captured["goal"] = goal
+        captured["history"] = history
+        from src.agent.orchestrator import OrchestratorResult
+        return OrchestratorResult(
+            success=True,
+            final_answer="ок",
+            steps_used=1,
+            tool_results=[],
+        )
+
+    mock_orch.run_async = fake_run_async
+    service._orchestrator = mock_orch
+
+    history = [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+    ]
+
+    events = []
+    async for event in service.ask_async("уточнение", history=history):
+        events.append(event)
+
+    assert captured["goal"] == "уточнение"
+    assert captured["history"] == history
+    assert len(events) == 1
+    assert events[0].result.success is True
+
+
+@pytest.mark.anyio
 async def test_ask_async_handles_max_steps_exceeded():
     """ask_async обрабатывает превышение лимита шагов."""
     from src.agent.orchestrator import MaxStepsExceeded
@@ -145,7 +184,7 @@ async def test_ask_async_handles_max_steps_exceeded():
 
     mock_orch = MagicMock()
 
-    async def fake_run_async(goal, on_step=None):
+    async def fake_run_async(goal, on_step=None, history=None):
         raise MaxStepsExceeded("Достигнут лимит шагов: 5")
 
     mock_orch.run_async = fake_run_async

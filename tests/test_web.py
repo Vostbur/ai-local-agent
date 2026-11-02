@@ -41,13 +41,14 @@ def _make_config(tmp_path: Path) -> AppConfig:
 class _MockService:
     """Простой AgentService-мок: одна задача — одно финальное событие.
 
-    Поддерживает и синхронный, и асинхронный интерфейс, потому что
-    веб-приложение теперь использует ask_async / ask_plain_async.
+    Поддерживает синхронный и асинхронный интерфейс, а также параметр
+    history (T37): принимает его и сохраняет для проверок.
     """
 
     def __init__(self, final_answer: str = "ok"):
         self.final_answer = final_answer
         self.calls: list[tuple[str, str]] = []  # (use_tools, goal)
+        self.history_calls: list[list[dict] | None] = []
 
     def _events(self, goal: str, use_tools: bool):
         self.calls.append(("tools" if use_tools else "plain", goal))
@@ -60,18 +61,22 @@ class _MockService:
             )
         )
 
-    def ask(self, goal: str):
+    def ask(self, goal: str, history: list[dict] | None = None):
+        self.history_calls.append(history)
         yield from self._events(goal, use_tools=True)
 
-    def ask_plain(self, goal: str):
+    def ask_plain(self, goal: str, history: list[dict] | None = None):
+        self.history_calls.append(history)
         yield from self._events(goal, use_tools=False)
 
-    async def ask_async(self, goal: str):
+    async def ask_async(self, goal: str, history: list[dict] | None = None):
+        self.history_calls.append(history)
         for event in self._events(goal, use_tools=True):
             await asyncio.sleep(0)
             yield event
 
-    async def ask_plain_async(self, goal: str):
+    async def ask_plain_async(self, goal: str, history: list[dict] | None = None):
+        self.history_calls.append(history)
         for event in self._events(goal, use_tools=False):
             await asyncio.sleep(0)
             yield event

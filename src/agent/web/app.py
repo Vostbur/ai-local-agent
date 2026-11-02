@@ -11,6 +11,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -24,8 +25,16 @@ from src.agent.service import AgentService
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
+class HistoryMessage(BaseModel):
+    """Одна реплика истории диалога (T37). Роль — только user/assistant."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class AskRequest(BaseModel):
     goal: str
+    history: list[HistoryMessage] | None = None
 
 
 class IndexRequest(BaseModel):
@@ -107,6 +116,7 @@ async def _run_task_async(
     state: TaskState,
     service: AgentService,
     use_tools: bool,
+    history: list[dict] | None = None,
 ) -> None:
     """Асинхронная задача: прогнать цель, сохранить события в TaskState."""
     def add_event(ev):
@@ -115,7 +125,11 @@ async def _run_task_async(
             state.mark_finished()
 
     try:
-        events_iter = service.ask_async(goal) if use_tools else service.ask_plain_async(goal)
+        events_iter = (
+            service.ask_async(goal, history=history)
+            if use_tools
+            else service.ask_plain_async(goal, history=history)
+        )
         async for event in events_iter:
             add_event(event)
     except asyncio.CancelledError:
@@ -175,28 +189,43 @@ def create_app(
     def health() -> dict:
         return {"status": "ok"}
 
-    def _start_task(goal: str, use_tools: bool) -> str:
+    def _start_task(
+        goal: str,
+        use_tools: bool,
+        history: list[dict] | None = None,
+    ) -> str:
         task_id = str(uuid.uuid4())
         state = TaskState()
         app.state.tasks[task_id] = state
 
         async_task = asyncio.create_task(
-            _run_task_async(task_id, goal, state, app.state.service, use_tools)
+            _run_task_async(
+                task_id, goal, state, app.state.service, use_tools, history
+            )
         )
         state.async_task = async_task
 
         return task_id
 
+    def _history_to_dicts(
+        history: list[HistoryMessage] | None,
+    ) -> list[dict] | None:
+        if not history:
+            return None
+        return [m.model_dump() for m in history]
+
     @app.post("/ask")
     async def ask(payload: AskRequest) -> dict:
         """Запустить агента с инструментами. Возвращает task_id для /stream."""
-        task_id = _start_task(payload.goal, use_tools=True)
+        history = _history_to_dicts(payload.history)
+        task_id = _start_task(payload.goal, use_tools=True, history=history)
         return {"task_id": task_id}
 
     @app.post("/ask-plain")
     async def ask_plain(payload: AskRequest) -> dict:
         """Запустить чат без инструментов. Возвращает task_id."""
-        task_id = _start_task(payload.goal, use_tools=False)
+        history = _history_to_dicts(payload.history)
+        task_id = _start_task(payload.goal, use_tools=False, history=history)
         return {"task_id": task_id}
 
     @app.post("/cancel/{task_id}")
