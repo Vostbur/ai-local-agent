@@ -1,7 +1,7 @@
 """BM25 — лексический поиск по чанкам."""
-
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 
@@ -9,6 +9,10 @@ from src.agent.rag.chunker import Chunk
 from src.agent.stem import stem as _stem
 
 _TOKEN_RE = re.compile(r"[а-яёa-z0-9]+")
+
+# Версия формата кэша bm25.json (T39).
+# Повышать при любом изменении структуры состояния индекса.
+BM25_FORMAT_VERSION = 1
 
 
 def _tokenize(text: str) -> list[str]:
@@ -20,6 +24,24 @@ def _tokenize(text: str) -> list[str]:
     """
     tokens = _TOKEN_RE.findall(text.lower())
     return [_stem(t) for t in tokens]
+
+
+def compute_chunks_manifest(chunks: list[Chunk]) -> str:
+    """Контрольная сумма содержимого чанков для валидации кэша BM25 (T39).
+
+    Учитывает путь, порядковый индекс и текст каждого чанка: любое
+    изменение корпуса (правка текста, пересборка, другой порядок)
+    меняет манифест и инвалидирует кэш.
+    """
+    h = hashlib.sha256()
+    for c in chunks:
+        h.update(str(c.path).encode("utf-8"))
+        h.update(b"\x00")
+        h.update(str(c.chunk_index).encode("utf-8"))
+        h.update(b"\x00")
+        h.update(c.text.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()
 
 
 class BM25Index:
@@ -80,6 +102,76 @@ class BM25Index:
         if chunk.section:
             return f"{chunk.section}. {chunk.text}"
         return chunk.text
+
+    def to_dict(self) -> dict:
+        """Сериализовать состояние индекса в JSON-совместимый dict (T39).
+
+        Включает манифест чанков, чтобы при загрузке можно было
+        проверить, что кэш соответствует текущему корпусу.
+        Ключи postings в ``tf`` преобразуются в строки (требование JSON).
+        """
+        return {
+            "format_version": BM25_FORMAT_VERSION,
+            "k1": self.k1,
+            "b": self.b,
+            "num_chunks": len(self.chunks),
+            "manifest": compute_chunks_manifest(self.chunks),
+            "doc_lens": self._doc_lens,
+            "avgdl": self._avgdl,
+            "tf": {
+                term: {str(doc_idx): tf for doc_idx, tf in postings.items()}
+                for term, postings in self._tf.items()
+            },
+            "df": self._df,
+            "idf": self._idf,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, chunks: list[Chunk]) -> "BM25Index":
+        """Восстановить индекс из результата ``to_dict()`` без перетокенизации.
+
+        Args:
+            data: состояние индекса (из ``bm25.json``).
+            chunks: текущий корпус чанков (должен совпадать с манифестом).
+
+        Raises:
+            ValueError: если версия формата, число чанков, манифест
+                или структура состояния не совпадают.
+        """
+        if data.get("format_version") != BM25_FORMAT_VERSION:
+            raise ValueError(
+                f"bm25 cache: unsupported format_version "
+                f"{data.get('format_version')!r}"
+            )
+        if data.get("num_chunks") != len(chunks):
+            raise ValueError(
+                f"bm25 cache: num_chunks mismatch "
+                f"({data.get('num_chunks')} != {len(chunks)})"
+            )
+        if data.get("manifest") != compute_chunks_manifest(chunks):
+            raise ValueError("bm25 cache: chunks manifest mismatch")
+
+        try:
+            idx = cls.__new__(cls)
+            idx.chunks = chunks
+            idx.k1 = data["k1"]
+            idx.b = data["b"]
+            idx._doc_lens = [int(x) for x in data["doc_lens"]]
+            idx._avgdl = float(data["avgdl"])
+            idx._tf = {
+                term: {int(doc_idx): int(tf) for doc_idx, tf in postings.items()}
+                for term, postings in data["tf"].items()
+            }
+            idx._df = {term: int(df) for term, df in data["df"].items()}
+            idx._idf = {term: float(idf) for term, idf in data["idf"].items()}
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"bm25 cache: corrupted state: {exc}") from exc
+
+        # _doc_tokens нужны только на этапе построения; search() их не
+        # использует. Оставляем пустым — маркер того, что индекс
+        # восстановлен из кэша, а не перетокенизирован.
+        idx._doc_tokens = []
+        return idx
 
     def search(
         self,
