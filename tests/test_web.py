@@ -1,7 +1,7 @@
 """Tests for the FastAPI web interface."""
-
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -39,7 +39,11 @@ def _make_config(tmp_path: Path) -> AppConfig:
 
 
 class _MockService:
-    """Простой AgentService-мок: одна задача — одно финальное событие."""
+    """Простой AgentService-мок: одна задача — одно финальное событие.
+
+    Поддерживает и синхронный, и асинхронный интерфейс, потому что
+    веб-приложение теперь использует ask_async / ask_plain_async.
+    """
 
     def __init__(self, final_answer: str = "ok"):
         self.final_answer = final_answer
@@ -62,6 +66,16 @@ class _MockService:
     def ask_plain(self, goal: str):
         yield from self._events(goal, use_tools=False)
 
+    async def ask_async(self, goal: str):
+        for event in self._events(goal, use_tools=True):
+            await asyncio.sleep(0)
+            yield event
+
+    async def ask_plain_async(self, goal: str):
+        for event in self._events(goal, use_tools=False):
+            await asyncio.sleep(0)
+            yield event
+
 
 def _client(tmp_path: Path, service=None) -> TestClient:
     app = create_app(_make_config(tmp_path), logger, service=service)
@@ -75,7 +89,6 @@ def test_index_page_returns_html(tmp_path):
     assert "ai-local-agent" in resp.text
     assert "Агент" in resp.text
     assert "Документы" in resp.text
-    assert "Агент" in resp.text
 
 
 def test_health(tmp_path):
