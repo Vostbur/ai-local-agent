@@ -1,6 +1,7 @@
 """Orchestrator — цикл plan-execute для агента."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -113,7 +114,6 @@ def _serialize_tool_result(result: object) -> Any:
         return {str(k): _serialize_tool_result(v) for k, v in result.items()}
     if isinstance(result, (list, tuple, set)):
         return [_serialize_tool_result(item) for item in result]
-    # Для остальных типов (например, datetime) преобразуем в строку
     return str(result)
 
 
@@ -175,12 +175,23 @@ class Orchestrator:
         self.tool_context = tool_context or {}
         self.max_tool_failures = max_tool_failures
 
+    async def _chat_async(self, messages: list[dict]) -> Any:
+        """Асинхронный вызов LLM с fallback на синхронный chat().
+
+        Новый OllamaLLM может реализовать chat_async().
+        Старые клиенты и тестовые fake-клиенты могут иметь только chat().
+        """
+        chat_async = getattr(self.llm, "chat_async", None)
+        if callable(chat_async):
+            return await chat_async(messages)
+        return await asyncio.to_thread(self.llm.chat, messages)
+
     def run(
         self,
         goal: str,
         on_step: Callable[[StepEvent], None] | None = None,
     ) -> OrchestratorResult:
-        """Выполнить цель, опционально сообщая о каждом шаге через ``on_step``."""
+        """Выполнить цель синхронно, опционально сообщая о каждом шаге."""
 
         def emit(event: StepEvent) -> None:
             if on_step is not None:
@@ -202,14 +213,8 @@ class Orchestrator:
 
             if response.type == "final":
                 if not response.content or not response.content.strip():
-                    self.logger.warning(
-                        "empty final answer at step %d", step
-                    )
-                    emit(
-                        StepEvent(
-                            step=step, event_type="final", status="empty"
-                        )
-                    )
+                    self.logger.warning("empty final answer at step %d", step)
+                    emit(StepEvent(step=step, event_type="final", status="empty"))
                     return OrchestratorResult(
                         success=False,
                         final_answer=None,
@@ -219,9 +224,7 @@ class Orchestrator:
                     )
 
                 self.logger.info("final: %s", response.content)
-                emit(
-                    StepEvent(step=step, event_type="final", status="ok")
-                )
+                emit(StepEvent(step=step, event_type="final", status="ok"))
                 return OrchestratorResult(
                     success=True,
                     final_answer=response.content,
@@ -229,7 +232,7 @@ class Orchestrator:
                     tool_results=tool_results,
                 )
 
-            elif response.type == "tool_call":
+            if response.type == "tool_call":
                 extra = self.tool_context.get(response.tool_name, {})
                 arguments = {
                     **(response.tool_arguments or {}),
@@ -273,7 +276,169 @@ class Orchestrator:
                             failed_calls[call_key],
                         )
                     else:
-                        # Сериализуем результат в JSON-совместимый формат
+                        tool_results.append(_serialize_tool_result(result))
+                        self.logger.info(
+                            "tool %s -> %s",
+                            response.tool_name,
+                            _summarize_for_log(result),
+                        )
+
+                emit(
+                    StepEvent(
+                        step=step,
+                        event_type="tool_result",
+                        tool_name=response.tool_name,
+                        status=tool_status,
+                        count=len(result) if isinstance(result, list) else None,
+                    )
+                )
+
+                display_args = response.tool_arguments or {}
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": f"tool_call: {response.tool_name}({display_args})",
+                    }
+                )
+
+                if tool_status == "SKIPPED":
+                    content = (
+                        f"tool_result: SKIPPED. {response.tool_name} {result}. "
+                        f"Respond with a final answer now."
+                    )
+                elif tool_status == "ERROR":
+                    content = (
+                        f"tool_result: ERROR. {response.tool_name} failed: {result} "
+                        f"Read the error message carefully: it explains what is wrong. "
+                        f"Fix the arguments or use another tool, then try again."
+                    )
+                else:
+                    content = (
+                        f"tool_result: {tool_status}. {response.tool_name} returned: "
+                        f"{result}. If this satisfies the user's goal, "
+                        f"respond with a final answer now."
+                    )
+
+                messages.append({"role": "user", "content": content})
+
+            else:
+                self.logger.warning(
+                    "unknown response type: %r at step %d",
+                    response.type,
+                    step,
+                )
+                return OrchestratorResult(
+                    success=False,
+                    final_answer=None,
+                    steps_used=step,
+                    error=f"unknown response type: {response.type!r}",
+                    tool_results=tool_results,
+                )
+
+        raise MaxStepsExceeded(f"Достигнут лимит шагов: {self.max_steps}")
+
+    async def run_async(
+        self,
+        goal: str,
+        on_step: Callable[[StepEvent], None] | None = None,
+    ) -> OrchestratorResult:
+        """Выполнить цель асинхронно.
+
+        Метод нужен для FastAPI/SSE, чтобы не держать отдельный поток на весь
+        цикл агента. Сетевые вызовы LLM выполняются через chat_async(), если
+        клиент его поддерживает. Синхронные инструменты вызываются через
+        asyncio.to_thread(), чтобы не блокировать event loop.
+        """
+
+        def emit(event: StepEvent) -> None:
+            if on_step is not None:
+                on_step(event)
+
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": goal},
+        ]
+        tool_results: list[Any] = []
+        executed_calls: set[str] = set()
+        failed_calls: dict[str, int] = {}
+
+        for step in range(1, self.max_steps + 1):
+            await asyncio.sleep(0)
+            emit(StepEvent(step=step, event_type="llm_call"))
+
+            response = await self._chat_async(messages)
+            self.logger.info("step=%d type=%s", step, response.type)
+
+            if response.type == "final":
+                if not response.content or not response.content.strip():
+                    self.logger.warning("empty final answer at step %d", step)
+                    emit(StepEvent(step=step, event_type="final", status="empty"))
+                    return OrchestratorResult(
+                        success=False,
+                        final_answer=None,
+                        steps_used=step,
+                        error="empty final answer",
+                        tool_results=tool_results,
+                    )
+
+                self.logger.info("final: %s", response.content)
+                emit(StepEvent(step=step, event_type="final", status="ok"))
+                return OrchestratorResult(
+                    success=True,
+                    final_answer=response.content,
+                    steps_used=step,
+                    tool_results=tool_results,
+                )
+
+            if response.type == "tool_call":
+                extra = self.tool_context.get(response.tool_name, {})
+                arguments = {
+                    **(response.tool_arguments or {}),
+                    **extra,
+                }
+
+                call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
+
+                if call_key in executed_calls:
+                    tool_status = "SKIPPED"
+                    result = (
+                        "was not executed again because the same call already succeeded"
+                    )
+                    self.logger.info("repeated tool call skipped: %s", call_key)
+
+                elif failed_calls.get(call_key, 0) >= self.max_tool_failures:
+                    tool_status = "ERROR"
+                    result = (
+                        f"failed {self.max_tool_failures} times in a row, giving up. "
+                        f"Do NOT call it again."
+                    )
+                    self.logger.info(
+                        "tool %s giving up after %d failures: %s",
+                        response.tool_name,
+                        self.max_tool_failures,
+                        call_key,
+                    )
+
+                else:
+                    try:
+                        await asyncio.sleep(0)
+                        result = await asyncio.to_thread(
+                            self.registry.call,
+                            response.tool_name,
+                            **arguments,
+                        )
+                        tool_status = "SUCCESS"
+                        executed_calls.add(call_key)
+                    except Exception as exc:
+                        tool_status = "ERROR"
+                        failed_calls[call_key] = failed_calls.get(call_key, 0) + 1
+                        result = f"ERROR: {exc}"
+                        self.logger.exception(
+                            "tool %s failed (attempt %d)",
+                            response.tool_name,
+                            failed_calls[call_key],
+                        )
+                    else:
                         tool_results.append(_serialize_tool_result(result))
                         self.logger.info(
                             "tool %s -> %s",
