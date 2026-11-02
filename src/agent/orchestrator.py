@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -82,57 +83,6 @@ SYSTEM_PROMPT = (
 
 MAX_TOOL_FAILURES = 2
 
-# Ограничения истории диалога (T37): бюджет под num_ctx=8192.
-MAX_HISTORY_MESSAGES = 10
-MAX_HISTORY_CHARS = 4000
-MAX_HISTORY_MESSAGE_CHARS = 2000
-
-
-def sanitize_history(
-    history: list[dict] | None,
-    max_messages: int = MAX_HISTORY_MESSAGES,
-    max_chars: int = MAX_HISTORY_CHARS,
-    max_message_chars: int = MAX_HISTORY_MESSAGE_CHARS,
-) -> list[dict]:
-    """Отфильтровать и обрезать историю диалога для вставки в контекст.
-
-    Защита от переполнения контекста и от мусора в теле запроса:
-    - оставляем только роли ``user`` / ``assistant`` с непустым строковым
-      содержимым (роли ``system`` / ``tool`` от клиента не принимаем);
-    - обрезаем каждое сообщение до ``max_message_chars``;
-    - берём последние ``max_messages`` сообщений;
-    - укладываемся в суммарный бюджет ``max_chars``, отбрасывая старейшие.
-    """
-    if not history:
-        return []
-
-    clean: list[dict] = []
-    for item in history:
-        if not isinstance(item, dict):
-            continue
-        role = item.get("role")
-        content = item.get("content")
-        if role not in ("user", "assistant") or not isinstance(content, str):
-            continue
-        content = content.strip()
-        if not content:
-            continue
-        if len(content) > max_message_chars:
-            content = content[:max_message_chars] + "…"
-        clean.append({"role": role, "content": content})
-
-    clean = clean[-max_messages:]
-
-    total = 0
-    kept: list[dict] = []
-    for item in reversed(clean):
-        total += len(item["content"])
-        if total > max_chars:
-            break
-        kept.append(item)
-    kept.reverse()
-    return kept
-
 
 def _summarize_for_log(result: object) -> str:
     """Краткое описание результата инструмента для лога.
@@ -166,6 +116,29 @@ def _serialize_tool_result(result: object) -> Any:
     if isinstance(result, (list, tuple, set)):
         return [_serialize_tool_result(item) for item in result]
     return str(result)
+
+
+def _make_call_key(tool_name: str, arguments: dict) -> str:
+    """Сформировать детерминированный ключ вызова инструмента (T40).
+
+    Ключ строится из имени инструмента и канонического JSON-представления
+    аргументов. Это даёт стабильное представление независимо от:
+    - порядка ключей в словаре;
+    - представления Path на разных ОС (используется POSIX-слэш);
+    - типа контейнера (list/tuple/set сериализуются одинаково).
+
+    Используется детектором повторов в ``Orchestrator.run`` / ``run_async``
+    для предотвращения повторного вызова одного и того же инструмента
+    с теми же аргументами.
+    """
+    serialized = _serialize_tool_result(arguments)
+    canonical = json.dumps(
+        serialized,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"{tool_name}:{canonical}"
 
 
 class MaxStepsExceeded(Exception):
@@ -231,6 +204,8 @@ class Orchestrator:
         goal: str, history: list[dict] | None
     ) -> list[dict]:
         """Собрать контекст: system + санитарная история + текущая цель."""
+        from src.agent.orchestrator import sanitize_history
+
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
             *sanitize_history(history),
@@ -299,7 +274,8 @@ class Orchestrator:
                     **extra,
                 }
 
-                call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
+                # T40: детерминированный ключ вызова через канонический JSON.
+                call_key = _make_call_key(response.tool_name, arguments)
 
                 if call_key in executed_calls:
                     tool_status = "SKIPPED"
@@ -453,7 +429,8 @@ class Orchestrator:
                     **extra,
                 }
 
-                call_key = f"{response.tool_name}:{sorted((k, str(v)) for k, v in arguments.items())}"
+                # T40: детерминированный ключ вызова через канонический JSON.
+                call_key = _make_call_key(response.tool_name, arguments)
 
                 if call_key in executed_calls:
                     tool_status = "SKIPPED"
@@ -555,3 +532,58 @@ class Orchestrator:
                 )
 
         raise MaxStepsExceeded(f"Достигнут лимит шагов: {self.max_steps}")
+
+
+# ---------------------------------------------------------------------------
+# Санитария истории (T37) — вынесено в конец, чтобы не мешать чтению.
+# ---------------------------------------------------------------------------
+
+MAX_HISTORY_MESSAGES = 10
+MAX_HISTORY_CHARS = 4000
+MAX_HISTORY_MESSAGE_CHARS = 2000
+
+
+def sanitize_history(
+    history: list[dict] | None,
+    max_messages: int = MAX_HISTORY_MESSAGES,
+    max_chars: int = MAX_HISTORY_CHARS,
+    max_message_chars: int = MAX_HISTORY_MESSAGE_CHARS,
+) -> list[dict]:
+    """Отфильтровать и обрезать историю диалога для вставки в контекст.
+
+    Защита от переполнения контекста и от мусора в теле запроса:
+    - оставляем только роли ``user`` / ``assistant`` с непустым строковым
+      содержимым (роли ``system`` / ``tool`` от клиента не принимаем);
+    - обрезаем каждое сообщение до ``max_message_chars``;
+    - берём последние ``max_messages`` сообщений;
+    - укладываемся в суммарный бюджет ``max_chars``, отбрасывая старейшие.
+    """
+    if not history:
+        return []
+
+    clean: list[dict] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if not content:
+            continue
+        if len(content) > max_message_chars:
+            content = content[:max_message_chars] + "…"
+        clean.append({"role": role, "content": content})
+
+    clean = clean[-max_messages:]
+
+    total = 0
+    kept: list[dict] = []
+    for item in reversed(clean):
+        total += len(item["content"])
+        if total > max_chars:
+            break
+        kept.append(item)
+    kept.reverse()
+    return kept
